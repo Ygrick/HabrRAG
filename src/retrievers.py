@@ -1,3 +1,4 @@
+import torch
 from langchain.retrievers import ContextualCompressionRetriever, EnsembleRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain.schema import Document
@@ -6,7 +7,7 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from settings import app_settings
+from src.settings import app_settings
 from src.logger import logger
 
 
@@ -30,7 +31,7 @@ def create_ensemble_retriever(documents: list[Document]) -> EnsembleRetriever:
     logger.info("Инициализация модели эмбеддингов для индексирования на GPU...")
     indexing_embedding_model = HuggingFaceEmbeddings(
         model_name=app_settings.retrieval.embedding,
-        model_kwargs={"device": "cuda"}
+        model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
     )
     
     vector_store = FAISS.from_documents(documents, indexing_embedding_model)

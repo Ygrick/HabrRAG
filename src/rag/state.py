@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from src.schemas import Document
+from src.rag.schemas import Document
 
 
 class RAGState(BaseModel):

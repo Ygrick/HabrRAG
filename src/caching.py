@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from src.logger import logger
-from settings import app_settings
+from src.settings import app_settings
 
 
 async def load_answer_cache() -> dict:
