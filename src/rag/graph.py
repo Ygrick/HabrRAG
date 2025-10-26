@@ -3,10 +3,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from settings import app_settings
+from src.settings import app_settings
 from src.logger import logger
 from src.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT
-from src.schemas import Document
+from src.rag.schemas import Document
 from src.rag.state import RAGState
 
 

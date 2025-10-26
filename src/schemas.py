@@ -1,17 +1,27 @@
-from pydantic import BaseModel, Field
+from typing import Optional
+
+from langchain.retrievers import ContextualCompressionRetriever
+from pydantic import BaseModel
+
+from src.rag.graph import RAGGraph
 
 
-class Document(BaseModel):
-    """Модель релевантного документа"""
-    document_id: int = Field(description="ID документа")
-    chunk_id: int = Field(description="ID чанка")
-    content: str = Field(description="Содержимое документа")
+class AppState(BaseModel):
+    """Состояние приложения"""
+    retriever: Optional[ContextualCompressionRetriever] = None
+    rag_graph: Optional[RAGGraph] = None
+    cache: Optional[dict] = None
     
-    def __str__(self) -> str:
-        """Красивое представление документа"""
-        paths = [
-            f"Document ID: {self.document_id}",
-            f"Chunk ID: {self.chunk_id}",
-            f"Content: {self.content}",
-        ]
-        return "\n\n".join(paths)
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class RAGRequest(BaseModel):
+    """Модель запроса для получения ответа от RAG"""
+    query: str
+
+
+class RAGResponse(BaseModel):
+    """Модель ответа от RAG"""
+    answer: str
+    from_cache: bool

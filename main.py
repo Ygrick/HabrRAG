@@ -7,8 +7,8 @@ import uvicorn
 from datasets import load_dataset
 from fastapi import FastAPI
 
-from schemas import AppState, RAGRequest, RAGResponse
-from settings import app_settings
+from src.schemas import AppState, RAGRequest, RAGResponse
+from src.settings import app_settings
 from src.caching import load_answer_cache, save_answer_cache
 from src.chunking import chunk_documents
 from src.logger import logger
