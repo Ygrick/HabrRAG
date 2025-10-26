@@ -6,7 +6,8 @@ from langgraph.graph import END, START, StateGraph
 from settings import app_settings
 from src.logger import logger
 from src.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT
-from src.schemas import Document, RAGState
+from src.schemas import Document
+from src.rag.state import RAGState
 
 
 class RAGGraph:
@@ -14,8 +15,8 @@ class RAGGraph:
         self.retriever = retriever
         self.filter_docs_llm = ChatOpenAI(
             model=app_settings.llm.model,
-            temperature=0.1,
-            max_tokens=100,
+            temperature=app_settings.llm.temperature,
+            max_tokens=app_settings.llm.max_tokens,
             base_url=app_settings.llm.base_url,
             api_key=app_settings.llm.api_key.get_secret_value(),
         )
@@ -68,10 +69,10 @@ class RAGGraph:
         """Идентификация релевантных ID документов."""
         logger.info("Идентификация релевантных документов")
 
-        docs_data = "\n".join([str(doc) for doc in state.documents])
+        docs_data = "\n\n".join([str(doc) for doc in state.documents])
         response = await self.filter_docs_llm.ainvoke([
             SystemMessage(content=DOC_RETRIEVAL_PROMPT),
-            HumanMessage(content=f"Документы:\n{docs_data}\n\nВопрос: {state.query}")
+            HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
         state.doc_ids = response.content
         
@@ -82,9 +83,10 @@ class RAGGraph:
         """Генерация ответа."""
         logger.info("Генерация ответа")
 
+        docs_data = "\n\n".join([str(doc) for doc in state.documents])
         response = await self.generate_answer_llm.ainvoke([
             SystemMessage(content=ANSWER_GENERATION_PROMPT.format(retrieved_data=state.doc_ids)),
-            HumanMessage(content=f"Документы:\n{state.documents}\n\nВопрос: {state.query}")
+            HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
         state.answer = response.content
 
@@ -101,8 +103,10 @@ class RAGGraph:
             
             # Запуск графа
             result = await self.graph.ainvoke(initial_state)
+            result = RAGState(**result)
+            logger.info(f"Результат: {result.answer}")
             return result.answer
         
         except Exception as e:
-            logger.error(f"Ошибка в RAG пайплайне: {e}")
+            logger.error(f"Ошибка в RAG пайплайне: {e}", exc_info=True)
             return "Произошла ошибка при генерации ответа."

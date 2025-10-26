@@ -1,9 +1,9 @@
 from typing import Optional
 
-from pydantic import BaseModel
 from langchain.retrievers import ContextualCompressionRetriever
+from pydantic import BaseModel
 
-from src.rag_graph import RAGGraph
+from src.rag.graph import RAGGraph
 
 
 class AppState(BaseModel):

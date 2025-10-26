@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import gc
 
 import mlflow
+import torch
 import uvicorn
 from datasets import load_dataset
 from fastapi import FastAPI
@@ -10,7 +12,7 @@ from settings import app_settings
 from src.caching import load_answer_cache, save_answer_cache
 from src.chunking import chunk_documents
 from src.logger import logger
-from src.rag_graph import RAGGraph
+from src.rag.graph import RAGGraph
 from src.retrievers import create_ensemble_retriever, create_reranked_retriever
 
 app_state = AppState()
@@ -30,6 +32,7 @@ async def lifespan(app: FastAPI):
         logger.info("Подключение к MLflow...")
         mlflow.set_tracking_uri(app_settings.mlflow.tracking_uri)
         mlflow.set_experiment(app_settings.mlflow.experiment_name)
+        mlflow.langchain.autolog()
         logger.info(f"MLflow настроен: {app_settings.mlflow.tracking_uri}")
     
     # Загрузка данных и создание ретривера
@@ -62,10 +65,34 @@ async def lifespan(app: FastAPI):
     yield
     
     logger.info("Завершение работы приложения...")
+    
     # Сохранение кэша перед завершением
     if app_state.cache:
         await save_answer_cache(app_state.cache)
         logger.info("Кэш сохранён")
+    
+    # Очистка ресурсов
+    logger.info("Освобождение ресурсов...")
+    
+    # Удаляем ссылки на большие объекты
+    app_state.rag_graph = None
+    app_state.retriever = None
+    app_state.cache = None
+    
+    # Очищаем сборщик мусора
+    gc.collect()
+    
+    # Очищаем GPU память если есть
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        logger.info("GPU память очищена")
+    
+    # Закрываем MLflow если он включен
+    if app_settings.mlflow.enabled:
+        mlflow.end_run()
+        logger.info("MLflow сессия закрыта")
+    
     logger.info("Приложение завершено")
 
 
@@ -79,8 +106,7 @@ app = FastAPI(
 
 @app.post("/answer", response_model=RAGResponse)
 async def get_rag_answer(request: RAGRequest) -> RAGResponse:
-    """
-    Получить ответ от RAG системы.
+    """Получить ответ от RAG.
     
     Args:
         request (RAGRequest): Запрос с вопросом пользователя
@@ -88,30 +114,20 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
     Returns:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
-    query = request.query
-    
-    if not query:
-        return RAGResponse(answer="Вопрос не может быть пустым", from_cache=False)
-    
-    logger.info(f"Новый запрос: {query}")
+    logger.info(f"Новый запрос: {request.query}")
     
     # Проверка кэша
-    if query in app_state.cache:
+    if request.query in app_state.cache:
         logger.info("Ответ найден в кэше")
-        return RAGResponse(answer=app_state.cache[query], from_cache=True)
+        return RAGResponse(answer=app_state.cache[request.query], from_cache=True)
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
-    
     try:
-        # Используем RAG граф для получения ответа
-        answer = app_state.rag_graph.invoke(query)
-        
-        # Сохранение в кэш
-        app_state.cache[query] = answer
-        await save_answer_cache(app_state.cache)
-        
+        answer = await app_state.rag_graph.run(request.query) # RAG
+        app_state.cache[request.query] = answer # Update cache
+        await save_answer_cache(app_state.cache) # Save cache
         return RAGResponse(answer=answer, from_cache=False)
-    
+
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса: {e}")
         return RAGResponse(answer="Ошибка при обработке запроса", from_cache=False)
@@ -119,15 +135,9 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
 
 @app.get("/health")
 async def health_check():
-    """
-    Проверка здоровья приложения.
-    
-    Returns:
-        dict: Статус приложения
-    """
     return {
         "status": "ok",
-        "message": "RAG API работает корректно",
+        "message": "RAG запущен",
         "cached_answers": len(app_state.cache) if app_state.cache else 0
     }
 

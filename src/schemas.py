@@ -14,14 +14,4 @@ class Document(BaseModel):
             f"Chunk ID: {self.chunk_id}",
             f"Content: {self.content}",
         ]
-        return "\n".join(paths)
-
-class RAGState(BaseModel):
-    """Состояние RAG пайплайна"""
-    query: str = Field(default="")
-    documents: list[Document] = Field(default_factory=list)
-    doc_ids: str = Field(default="")
-    answer: str = Field(default="")
-    
-    class Config:
-        arbitrary_types_allowed = True
+        return "\n\n".join(paths)
