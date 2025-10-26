@@ -17,11 +17,11 @@ HabrRAG — это асинхронный REST API для Retrieval-Augmented Ge
 
 ```
 HabrRAG/
-├── main.py                    # FastAPI приложение
-├── schemas.py                 # Pydantic модели (AppState, RAGRequest, RAGResponse)
-├── settings.py                # Конфигурация из переменных окружения
+├── main.py                   # FastAPI приложение
 ├── src/
 │   ├── logger.py             # Логирование в консоль
+│   ├── schemas.py            # Pydantic модели (AppState, RAGRequest, RAGResponse)
+│   ├── settings.py           # Конфигурация из переменных окружения
 │   ├── caching.py            # Кэширование ответов (pathlib)
 │   ├── rag/
 │   │   ├── graph.py          # LangGraph RAG пайплайн
