@@ -37,8 +37,18 @@ async def lifespan(app: FastAPI):
     
     # Загрузка данных и создание ретривера
     logger.info(f"Загрузка датасета {app_settings.dataset}...")
-    rag_dataset = load_dataset(app_settings.dataset, split=app_settings.split_dataset)
-    documents = rag_dataset["context"]
+    
+    # Для датасетов со старыми скриптами загружаем напрямую из файла
+    if app_settings.dataset == "IlyaGusev/habr":
+        rag_dataset = load_dataset(
+            "json",
+            data_files="https://huggingface.co/datasets/IlyaGusev/habr/resolve/main/habr.jsonl.zst",
+            split=app_settings.split_dataset
+        )
+    else:
+        rag_dataset = load_dataset(app_settings.dataset, split=app_settings.split_dataset)
+    
+    documents = rag_dataset["text_markdown"]
     logger.info(f"Датасет загружен: {len(documents)} документов")
     
     logger.info("Чанкирование документов...")
