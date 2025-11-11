@@ -13,7 +13,6 @@ from src.settings import app_settings
 from src.caching import load_answer_cache, save_answer_cache
 from src.chunking import chunk_documents
 from src.logger import logger
-from src.mlflow_runtime import ensure_local_mlflow_server
 from src.rag.graph import RAGGraph
 from src.retrievers import create_ensemble_retriever, create_reranked_retriever
 
@@ -30,25 +29,13 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Инициализация приложения RAG...")
     
-    mlflow_active = False
-    app_state.mlflow_process = None
-    active_tracking_uri = app_settings.mlflow.tracking_uri
     # Инициализация MLflow
     if app_settings.mlflow.enabled:
-        try:
-            mlflow_process, tracking_uri = ensure_local_mlflow_server(app_settings.mlflow)
-            app_state.mlflow_process = mlflow_process
-            logger.info("Подключение к MLflow...")
-            if tracking_uri != app_settings.mlflow.tracking_uri:
-                app_settings.mlflow.tracking_uri = tracking_uri
-            active_tracking_uri = tracking_uri
-            mlflow.set_tracking_uri(active_tracking_uri)
-            mlflow.set_experiment(app_settings.mlflow.experiment_name)
-            mlflow.langchain.autolog()
-            mlflow_active = True
-            logger.info(f"MLflow настроен: {active_tracking_uri}")
-        except Exception as exc:
-            logger.warning("Не удалось инициализировать MLflow (%s). Трекинг отключён.", exc)
+        logger.info("Подключение к MLflow...")
+        mlflow.set_tracking_uri(app_settings.mlflow.tracking_uri)
+        mlflow.set_experiment(app_settings.mlflow.experiment_name)
+        mlflow.langchain.autolog()
+        logger.info(f"MLflow настроен: {app_settings.mlflow.tracking_uri}")
     
     # Инициализация Qdrant
     logger.info("Инициализация Qdrant клиента...")
@@ -104,12 +91,10 @@ async def lifespan(app: FastAPI):
     
     # Удаляем ссылки на большие объекты
     qdrant_client = app_state.qdrant_client
-    mlflow_process = app_state.mlflow_process
     app_state.rag_graph = None
     app_state.retriever = None
     app_state.cache = None
     app_state.qdrant_client = None
-    app_state.mlflow_process = None
     
     # Очищаем сборщик мусора
     gc.collect()
@@ -120,22 +105,9 @@ async def lifespan(app: FastAPI):
         torch.cuda.reset_peak_memory_stats()
         logger.info("GPU память очищена")
     
-    # Закрываем MLflow если он включен
-    if mlflow_active:
-        mlflow.end_run()
-        logger.info("MLflow сессия закрыта")
-    
     if qdrant_client:
         qdrant_client.close()
         logger.info("Qdrant клиент закрыт")
-    
-    if mlflow_process:
-        mlflow_process.terminate()
-        try:
-            mlflow_process.wait(timeout=10)
-        except Exception:
-            mlflow_process.kill()
-        logger.info("Локальный MLflow сервер остановлен")
     
     logger.info("Приложение завершено")
 
