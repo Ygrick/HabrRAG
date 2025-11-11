@@ -13,20 +13,6 @@ from src.settings import app_settings
 from src.logger import logger
 
 
-def _infer_embedding_dimension(embedding_model: HuggingFaceEmbeddings) -> int:
-    """
-    Вычисляет размерность эмбеддингов модели.
-
-    Args:
-        embedding_model (HuggingFaceEmbeddings): Модель эмбеддингов HuggingFace.
-
-    Returns:
-        int: Размерность выходного вектора.
-    """
-    sample_vector = embedding_model.embed_query("dimension probe")
-    return len(sample_vector)
-
-
 def _should_reindex(client: QdrantClient, collection_name: str) -> bool:
     """
     Определяет, требуется ли переиндексация коллекции Qdrant.
@@ -84,7 +70,7 @@ def _prepare_qdrant_collection(
         return
 
     logger.info("Переиндексация коллекции Qdrant (%s)...", collection_name)
-    vector_size = _infer_embedding_dimension(embedding_model)
+    vector_size = len(embedding_model.embed_query("dimension probe"))
     client.recreate_collection(
         collection_name=collection_name,
         vectors_config=qdrant_models.VectorParams(
