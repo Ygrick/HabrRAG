@@ -17,6 +17,8 @@ dependencies = [
     "datasets==4.1.1",
     "torch==2.5.1",
     "sentence-transformers==5.0.0",
+    "langchain-qdrant>=0.2.1",
+    "qdrant-client>=1.15.1",
 ]
 
 [build-system]

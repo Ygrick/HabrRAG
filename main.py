@@ -6,6 +6,7 @@ import torch
 import uvicorn
 from datasets import load_dataset
 from fastapi import FastAPI
+from qdrant_client import QdrantClient
 
 from src.schemas import AppState, RAGRequest, RAGResponse
 from src.settings import app_settings
@@ -16,6 +17,7 @@ from src.rag.graph import RAGGraph
 from src.retrievers import create_ensemble_retriever, create_reranked_retriever
 
 app_state = AppState()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,6 +37,19 @@ async def lifespan(app: FastAPI):
         mlflow.langchain.autolog()
         logger.info(f"MLflow настроен: {app_settings.mlflow.tracking_uri}")
     
+    # Инициализация Qdrant
+    logger.info("Инициализация Qdrant клиента...")
+    qdrant_settings = app_settings.qdrant
+    qdrant_kwargs = {"prefer_grpc": qdrant_settings.prefer_grpc}
+    if qdrant_settings.url:
+        qdrant_kwargs["url"] = qdrant_settings.url
+        if qdrant_settings.api_key and qdrant_settings.api_key.get_secret_value():
+            qdrant_kwargs["api_key"] = qdrant_settings.api_key.get_secret_value()
+    else:
+        qdrant_kwargs["path"] = qdrant_settings.path
+    app_state.qdrant_client = QdrantClient(**qdrant_kwargs)
+    logger.info("Qdrant клиент готов")
+    
     # Загрузка данных и создание ретривера
     logger.info(f"Загрузка датасета {app_settings.dataset}...")
     rag_dataset = load_dataset(app_settings.dataset, split=app_settings.split_dataset)
@@ -45,7 +60,7 @@ async def lifespan(app: FastAPI):
     chunked_docs = chunk_documents(documents)
     
     logger.info("Создание ретривера...")
-    ensemble_retriever = create_ensemble_retriever(chunked_docs)
+    ensemble_retriever = create_ensemble_retriever(chunked_docs, app_state.qdrant_client)
     app_state.retriever = create_reranked_retriever(ensemble_retriever)
     logger.info("Ретривер создан и готов к использованию")
     
@@ -75,9 +90,11 @@ async def lifespan(app: FastAPI):
     logger.info("Освобождение ресурсов...")
     
     # Удаляем ссылки на большие объекты
+    qdrant_client = app_state.qdrant_client
     app_state.rag_graph = None
     app_state.retriever = None
     app_state.cache = None
+    app_state.qdrant_client = None
     
     # Очищаем сборщик мусора
     gc.collect()
@@ -92,6 +109,9 @@ async def lifespan(app: FastAPI):
     if app_settings.mlflow.enabled:
         mlflow.end_run()
         logger.info("MLflow сессия закрыта")
+    if qdrant_client:
+        qdrant_client.close()
+        logger.info("Qdrant клиент закрыт")
     
     logger.info("Приложение завершено")
 
