@@ -88,6 +88,16 @@ curl http://localhost:8000/health
 { "query": "Who were the two convicted killers that escaped from an upstate New York maximum-security prison?" }
 ```
 
+## 🐳 Docker
+
+```bash
+docker-compose up --build
+```
+
+Приложение будет доступно на `http://localhost:8000/docs`  
+Qdrant будет доступен на `http://localhost:6333/dashboard#/collections`  
+MLflow будет доступен на `http://localhost:5000/#/experiments`  
+
 ## 🛠️ Используемые технологии
 
 | Технология | Назначение |
