@@ -105,6 +105,10 @@ async def lifespan(app: FastAPI):
         torch.cuda.reset_peak_memory_stats()
         logger.info("GPU память очищена")
     
+    # Закрываем MLflow если он включен
+    if app_settings.mlflow.enabled:
+        mlflow.end_run()
+        logger.info("MLflow сессия закрыта")
     if qdrant_client:
         qdrant_client.close()
         logger.info("Qdrant клиент закрыт")
