@@ -2,7 +2,6 @@
 name = "habrrag"
 version = "0.1.0"
 description = "RAG for habr articles"
-readme = "README.md"
 requires-python = "~=3.11.0"
 dependencies = [
     "langchain==0.3.27",
