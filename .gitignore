@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 mlruns/
 mlartifacts/
+
+# MLFlow
+mlflow/
+
+# Qdrant
+qdrant_data/

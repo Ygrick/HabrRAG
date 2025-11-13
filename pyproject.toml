@@ -2,7 +2,6 @@
 name = "habrrag"
 version = "0.1.0"
 description = "RAG for habr articles"
-readme = "README.md"
 requires-python = "~=3.11.0"
 dependencies = [
     "langchain==0.3.27",
@@ -17,6 +16,8 @@ dependencies = [
     "datasets==4.1.1",
     "torch==2.5.1",
     "sentence-transformers==5.0.0",
+    "langchain-qdrant>=0.2.1",
+    "qdrant-client>=1.15.1",
 ]
 
 [build-system]

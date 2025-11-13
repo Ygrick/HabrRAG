@@ -34,6 +34,7 @@ def _pick_texts(dataset, field: Optional[str]) -> List[str]:
 
     # Эвристики для популярных форматов
     candidates = [
+        "text_markdown",
         "context",
         "text",
         "content",
