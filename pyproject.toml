@@ -18,6 +18,7 @@ dependencies = [
     "sentence-transformers==5.0.0",
     "langchain-qdrant>=0.2.1",
     "qdrant-client>=1.15.1",
+    "zstandard>=0.23.0",
 ]
 
 [build-system]
