@@ -5,7 +5,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src.settings import app_settings
 from src.logger import logger
-from src.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT
+from src.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT, PARAPHRASE_PROMPT
 from src.rag.schemas import Document
 from src.rag.state import RAGState
 
@@ -14,6 +14,13 @@ class RAGGraph:
     def __init__(self, retriever: ContextualCompressionRetriever):
         self.retriever = retriever
         self.filter_docs_llm = ChatOpenAI(
+            model=app_settings.llm.model,
+            temperature=app_settings.llm.temperature,
+            max_tokens=app_settings.llm.max_tokens,
+            base_url=app_settings.llm.base_url,
+            api_key=app_settings.llm.api_key.get_secret_value(),
+        )
+        self.paraphrase_llm = ChatOpenAI(
             model=app_settings.llm.model,
             temperature=app_settings.llm.temperature,
             max_tokens=app_settings.llm.max_tokens,
@@ -34,17 +41,32 @@ class RAGGraph:
         graph_builder = StateGraph(RAGState)
         
         # Добавляем узлы
+        graph_builder.add_node("paraphrase_query", self._paraphrase_query)
         graph_builder.add_node("retrieve_docs", self._retrieve_docs)
         graph_builder.add_node("identify_docs", self._identify_relevant_docs)
         graph_builder.add_node("generate_answer", self._generate_answer)
         
         # Добавляем рёбра
-        graph_builder.add_edge(START, "retrieve_docs")
+        graph_builder.add_edge(START, "paraphrase_query")
+        graph_builder.add_edge("paraphrase_query", "retrieve_docs")
         graph_builder.add_edge("retrieve_docs", "identify_docs")
         graph_builder.add_edge("identify_docs", "generate_answer")
         graph_builder.add_edge("generate_answer", END)
         
         return graph_builder.compile()
+
+    async def _paraphrase_query(self, state: RAGState) -> RAGState:
+        """Переформулировка запроса пользователя."""
+        logger.info(f"Запрос пользователя: {state.query}")
+        
+        response = await self.paraphrase_llm.ainvoke([
+            SystemMessage(content=PARAPHRASE_PROMPT),
+            HumanMessage(content=state.query)
+        ])
+        state.query = response.content.strip()
+        
+        logger.info(f"Переформулированный запрос: {state.query}")
+        return state
 
     async def _retrieve_docs(self, state: RAGState) -> RAGState:
         """Поиск релевантных документов."""
