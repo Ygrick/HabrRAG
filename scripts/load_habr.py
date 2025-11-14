@@ -1,6 +1,8 @@
 import argparse
+import io
+import json
 from typing import List, Optional
-
+import zstandard as zstd
 import torch
 from datasets import load_dataset
 from langchain.schema import Document
@@ -25,47 +27,38 @@ def _init_qdrant_client() -> QdrantClient:
     return QdrantClient(**qdrant_kwargs)
 
 
-def _pick_texts(dataset, field: Optional[str]) -> List[str]:
-    # Явно заданное поле
-    if field:
-        if field in dataset.column_names:
-            return dataset[field]
-        raise ValueError(f"В датасете нет поля '{field}'. Доступные колонки: {dataset.column_names}")
-
-    # Эвристики для популярных форматов
-    candidates = [
-        "text_markdown",
-        "context",
-        "text",
-        "content",
-        "article",
-        "body",
-    ]
-    for name in candidates:
-        if name in dataset.column_names:
-            return dataset[name]
-
-    # Комбинации полей (например title + text)
-    if "title" in dataset.column_names and "text" in dataset.column_names:
-        return [f"{t}\n\n{x}" for t, x in zip(dataset["title"], dataset["text"])]
-
-    raise ValueError(
-        f"Не удалось автоматически определить текстовое поле. Доступные колонки: {dataset.column_names}. "
-        "Укажите --field явно."
-    )
-
-
 def _load_local_jsonl_zst(path: str):
-    try:
-        # datasets поддерживает zstd через параметр compression='zstd'
-        return load_dataset("json", data_files=path, compression="zstd", split="train")
-    except Exception as e:
-        # Частый случай — отсутствует пакет 'zstandard'
-        if "zstandard" in str(e).lower() or "zstd" in str(e).lower():
-            raise RuntimeError(
-                "Для чтения *.zst требуется пакет 'zstandard'. Установите его и повторите попытку."
-            ) from e
-        raise
+   
+    logger.info(f"Чтение файла {path} с использованием zstandard...")
+    documents = []
+    
+    with open(path, 'rb') as f:
+        # Создаем декомпрессор
+        dctx = zstd.ZstdDecompressor()
+        with dctx.stream_reader(f) as reader:
+            # Читаем и декодируем построчно
+            text_reader = io.TextIOWrapper(reader, encoding='utf-8')
+            for line_num, line in enumerate(text_reader):
+                try:
+                    data = json.loads(line.strip())
+                    # Извлекаем только поле text_markdown
+                    if 'text_markdown' in data:
+                        documents.append(data['text_markdown'])
+                    else:
+                        logger.warning(f"Поле 'text_markdown' не найдено в документе {line_num}")
+                        continue
+                    
+                    # Останавливаемся после 10 документов
+                    if len(documents) >= 10:
+                        logger.info(f"Достигнут лимит в 10 документов")
+                        break
+                        
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Ошибка JSON в строке {line_num}: {e}")
+                    continue
+    
+    logger.info(f"Успешно загружено {len(documents)} документов")
+    return documents
 
 
 def run_ingest(
@@ -90,15 +83,8 @@ def run_ingest(
         logger.info(f"Загрузка датасета из HF: {hf} (split={split})")
         ds = load_dataset(hf, split=split)
 
-    texts = _pick_texts(ds, field)
-    if limit is not None:
-        texts = texts[:limit]
-        logger.info(f"Ограничение по числу документов: {len(texts)}")
-    else:
-        logger.info(f"Всего документов: {len(texts)}")
-
     # 2) Чанкинг
-    chunks: List[Document] = chunk_documents(texts, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    chunks: List[Document] = chunk_documents(ds, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
     # 3) Qdrant + индексация
     client = _init_qdrant_client()
@@ -141,7 +127,7 @@ def main():
     args = parser.parse_args()
 
     run_ingest(
-        local=args.local,
+        local="C:\\Users\\a.diyanov\\PyCharmProjects\\University\\HabrRAG\\habr.jsonl.zst",
         hf=args.hf,
         split=args.split,
         field=args.field,

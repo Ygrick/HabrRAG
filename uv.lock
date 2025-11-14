@@ -784,6 +784,7 @@ dependencies = [
     { name = "rank-bm25" },
     { name = "sentence-transformers" },
     { name = "torch" },
+    { name = "zstandard" },
 ]
 
 [package.metadata]
@@ -802,6 +803,7 @@ requires-dist = [
     { name = "rank-bm25", specifier = "==0.2.2" },
     { name = "sentence-transformers", specifier = "==5.0.0" },
     { name = "torch", specifier = "==2.5.1" },
+    { name = "zstandard", specifier = ">=0.23.0" },
 ]
 
 [[package]]
