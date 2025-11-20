@@ -13,6 +13,33 @@ from src.settings import app_settings
 from src.logger import logger
 
 
+def collection_exists_and_not_empty(
+    client: QdrantClient, collection_name: str
+) -> bool:
+    """
+    Проверяет, существует ли коллекция Qdrant и не пуста ли она.
+
+    Args:
+        client (QdrantClient): Клиент Qdrant.
+        collection_name (str): Имя коллекции.
+
+    Returns:
+        bool: True, если коллекция существует и содержит данные, иначе False.
+    """
+    try:
+        exists = client.collection_exists(collection_name=collection_name)
+        if not exists:
+            return False
+
+        stats = client.count(collection_name=collection_name, exact=True)
+        return stats.count > 0
+    except Exception as exc:
+        logger.warning(
+            "Не удалось проверить коллекцию Qdrant: %s", exc
+        )
+        return False
+
+
 def _should_reindex(client: QdrantClient, collection_name: str) -> bool:
     """
     Определяет, требуется ли переиндексация коллекции Qdrant.
@@ -141,6 +168,49 @@ def create_ensemble_retriever(
 
     logger.info("EnsembleRetriever успешно создан.")
     return ensemble_retriever
+
+
+def create_qdrant_only_retriever(
+    qdrant_client: QdrantClient,
+) -> ContextualCompressionRetriever:
+    """
+    Создаёт ретривер только на основе Qdrant (без BM25).
+    Используется когда коллекция уже существует и документы не нужно загружать.
+
+    Args:
+        qdrant_client (QdrantClient): Клиент Qdrant.
+
+    Returns:
+        ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности.
+    """
+    logger.info("Создание Qdrant ретривера (коллекция уже существует)...")
+    query_embedding_model = HuggingFaceEmbeddings(
+        model_name=app_settings.retrieval.embedding,
+        model_kwargs={"device": "cpu"}
+    )
+    vector_store = QdrantVectorStore(
+        client=qdrant_client,
+        collection_name=app_settings.qdrant.collection_name,
+        embedding=query_embedding_model,
+    )
+    qdrant_retriever = vector_store.as_retriever(
+        search_type="similarity",
+        search_kwargs={'k': app_settings.retrieval.faiss_k}
+    )
+
+    logger.info("Создание ретривера с Cross-Encoder Reranking...")
+    top_n = app_settings.retrieval.top_k
+    cross_encoder = HuggingFaceCrossEncoder(
+        model_name=app_settings.retrieval.cross_encoder
+    )
+    reranker = CrossEncoderReranker(model=cross_encoder, top_n=top_n)
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=reranker,
+        base_retriever=qdrant_retriever
+    )
+
+    logger.info("Ретривер с Cross-Encoder Reranking успешно создан.")
+    return compression_retriever
 
 
 def create_reranked_retriever(

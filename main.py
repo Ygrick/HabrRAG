@@ -4,7 +4,6 @@ import gc
 import mlflow
 import torch
 import uvicorn
-from datasets import load_dataset
 from fastapi import FastAPI
 from qdrant_client import QdrantClient
 
@@ -12,9 +11,15 @@ from src.schemas import AppState, RAGRequest, RAGResponse
 from src.settings import app_settings
 from src.caching import load_answer_cache, save_answer_cache
 from src.chunking import chunk_documents
+from src.data_loader import load_documents
 from src.logger import logger
 from src.rag.graph import RAGGraph
-from src.retrievers import create_ensemble_retriever, create_reranked_retriever
+from src.retrievers import (
+    collection_exists_and_not_empty,
+    create_ensemble_retriever,
+    create_qdrant_only_retriever,
+    create_reranked_retriever,
+)
 
 app_state = AppState()
 
@@ -43,25 +48,50 @@ async def lifespan(app: FastAPI):
     qdrant_kwargs = {"prefer_grpc": qdrant_settings.prefer_grpc}
     if qdrant_settings.url:
         qdrant_kwargs["url"] = qdrant_settings.url
-        if qdrant_settings.api_key and qdrant_settings.api_key.get_secret_value():
-            qdrant_kwargs["api_key"] = qdrant_settings.api_key.get_secret_value()
+        api_key = qdrant_settings.api_key
+        if api_key and api_key.get_secret_value():
+            qdrant_kwargs["api_key"] = api_key.get_secret_value()
     else:
         qdrant_kwargs["path"] = qdrant_settings.path
     app_state.qdrant_client = QdrantClient(**qdrant_kwargs)
     logger.info("Qdrant клиент готов")
-    
-    # Загрузка данных и создание ретривера
-    logger.info(f"Загрузка датасета {app_settings.dataset}...")
-    rag_dataset = load_dataset(app_settings.dataset, split=app_settings.split_dataset)
-    documents = rag_dataset["context"]
-    logger.info(f"Датасет загружен: {len(documents)} документов")
-    
-    logger.info("Чанкирование документов...")
-    chunked_docs = chunk_documents(documents)
-    
-    logger.info("Создание ретривера...")
-    ensemble_retriever = create_ensemble_retriever(chunked_docs, app_state.qdrant_client)
-    app_state.retriever = create_reranked_retriever(ensemble_retriever)
+
+    # Проверяем существование коллекции
+    collection_name = app_settings.qdrant.collection_name
+    collection_ready = collection_exists_and_not_empty(
+        app_state.qdrant_client, collection_name
+    )
+
+    if collection_ready:
+        logger.info(
+            f"Коллекция '{collection_name}' уже существует и содержит данные. "
+            "Пропускаем загрузку документов и используем существующую "
+            "коллекцию."
+        )
+        logger.info(
+            "Создание ретривера на основе существующей коллекции..."
+        )
+        app_state.retriever = create_qdrant_only_retriever(
+            app_state.qdrant_client
+        )
+    else:
+        logger.info(
+            f"Коллекция '{collection_name}' не существует или пуста. "
+            "Загружаем и индексируем документы..."
+        )
+        # Загрузка данных
+        logger.info("Загрузка документов...")
+        documents = load_documents()
+
+        logger.info("Чанкирование документов...")
+        chunked_docs = chunk_documents(documents)
+
+        logger.info("Создание ретривера...")
+        ensemble_retriever = create_ensemble_retriever(
+            chunked_docs, app_state.qdrant_client
+        )
+        app_state.retriever = create_reranked_retriever(ensemble_retriever)
+
     logger.info("Ретривер создан и готов к использованию")
     
     # Инициализация RAG графа
