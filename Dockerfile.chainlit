@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+# Установка необходимых пакетов
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Установка зависимостей для Chainlit
+RUN pip install --no-cache-dir \
+    chainlit \
+    httpx \
+    asyncpg
+
+# Копирование кода приложения
+COPY ui/chainlit_app.py ./chainlit_app.py
+COPY src/settings.py ./src/settings.py
+COPY src/logger.py ./src/logger.py
+
+# Переменные окружения
+ENV PYTHONPATH=/app

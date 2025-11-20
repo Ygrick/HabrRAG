@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import gc
+import re
 
 import mlflow
 import torch
@@ -7,9 +8,9 @@ import uvicorn
 from fastapi import FastAPI
 from qdrant_client import QdrantClient
 
-from src.schemas import AppState, RAGRequest, RAGResponse
+from src.schemas import AppState, RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
-from src.caching import load_answer_cache, save_answer_cache
+from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
 from src.chunking import chunk_documents
 from src.data_loader import load_documents
 from src.logger import logger
@@ -100,21 +101,11 @@ async def lifespan(app: FastAPI):
     app_state.rag_graph = rag_graph
     logger.info("RAG граф инициализирован")
     
-    # Загрузка кэша ответов
-    logger.info("Загрузка кэша ответов...")
-    app_state.cache = await load_answer_cache()
-    logger.info(f"Кэш загружен: {len(app_state.cache)} ответов")
-    
     logger.info("Приложение инициализировано успешно")
     
     yield
     
     logger.info("Завершение работы приложения...")
-    
-    # Сохранение кэша перед завершением
-    if app_state.cache:
-        await save_answer_cache(app_state.cache)
-        logger.info("Кэш сохранён")
     
     # Очистка ресурсов
     logger.info("Освобождение ресурсов...")
@@ -123,7 +114,6 @@ async def lifespan(app: FastAPI):
     qdrant_client = app_state.qdrant_client
     app_state.rag_graph = None
     app_state.retriever = None
-    app_state.cache = None
     app_state.qdrant_client = None
     
     # Очищаем сборщик мусора
@@ -145,6 +135,16 @@ async def lifespan(app: FastAPI):
     
     logger.info("Приложение завершено")
 
+def parse_sources(text: str) -> dict[int, str]:
+    # заглушка для парсинга источников из текста ответа
+    # [1] ... - http://...
+    pattern = r"\[(\d+)\].*?-\s*(https?://[^\s\"']+)"
+    
+    matches = re.findall(pattern, text)
+    
+    # return {int(num): url for num, url in matches}
+    return {1:"https://habr.com/ru/companies/ru_mts/articles/965622/",
+            2: "https://habr.com/ru/companies/avito/articles/966018/"}
 
 app = FastAPI(
     title="RAG API",
@@ -164,31 +164,50 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
     Returns:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
-    logger.info(f"Новый запрос: {request.query}")
+    query = request.query.strip()
+
+    logger.info(f"Новый запрос: {query}")
+
     
-    # Проверка кэша
-    if request.query in app_state.cache:
+    cached_answer = await get_cached_answer(query)
+    if cached_answer:
         logger.info("Ответ найден в кэше")
-        return RAGResponse(answer=app_state.cache[request.query], from_cache=True)
+        return RAGResponse(answer=cached_answer, from_cache=True, links=parse_sources(cached_answer))
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
-        answer = await app_state.rag_graph.run(request.query) # RAG
-        app_state.cache[request.query] = answer # Update cache
-        await save_answer_cache(app_state.cache) # Save cache
-        return RAGResponse(answer=answer, from_cache=False)
-
+        answer = await app_state.rag_graph.run(query)
+        await set_cached_answer(query, answer)
+        return RAGResponse(answer=answer, from_cache=False, links=parse_sources(answer))
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса: {e}")
-        return RAGResponse(answer="Ошибка при обработке запроса", from_cache=False)
+        return RAGResponse(answer="Ошибка при обработке запроса", from_cache=False, links={})
+
+
+@app.post("/summarize", response_model=SummarizationResponse)
+async def summarize_article(request: SummarizationRequest) -> SummarizationResponse:
+    """Получить суммаризацию статьи по её ID.
+    
+    Args:
+        request (SummarizationRequest): URL статьи
+    
+    Returns:
+        SummarizationResponse: Суммаризация статьи
+    """
+    logger.info(f"Запрос суммаризации статьи: {request.article_url}")
+    
+    summary = f"Это заглушка для суммаризации статьи с URL {request.article_url}."
+    
+    return SummarizationResponse(summary=summary)
 
 
 @app.get("/health")
 async def health_check():
+    cache_count = await get_cache_count()
     return {
         "status": "ok",
         "message": "RAG запущен",
-        "cached_answers": len(app_state.cache) if app_state.cache else 0
+        "cached_answers": cache_count
     }
 
 

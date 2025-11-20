@@ -22,7 +22,7 @@ class RetrievalSettings(BaseModel):
 
 
 class MLflowSettings(BaseModel):
-    tracking_uri: str = "http://127.0.0.1:5000"
+    tracking_uri: str = "http://127.0.0.1:5001"
     experiment_name: str = "LangChain. RAG-Агент: Поиск и Генерация Ответов"
     enabled: bool = True
     backend_store_uri: str = "sqlite:///./mlflow/mlflow.db"
@@ -64,17 +64,34 @@ class FastAPISettings(BaseModel):
     port: int = 8000
     reload: bool = False
 
+class CacheDatabaseSettings(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 5432
+    user: str = "chainlit_user"
+    password: SecretStr = SecretStr("chainlit_pass")
+    database: str = "postgres_db"
+    cache_table: str = "answer_cache"
+
+class ChainlitDatabaseSettings(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 5432
+    user: str = "chainlit_user"
+    password: SecretStr = SecretStr("chainlit_pass")
+    database: str = "chainlit_db"
+    fastapi_service_url: str = "http://app:8000"
 
 class AppSettings(BaseSettings):
-    cache_path: str = "./cache/answer_cache.json"
     dataset: str = "neural-bridge/rag-dataset-1200"
-    split_dataset: str = "test"
+    split_dataset: str = "train"
+    dataset_column: str = "text_markdown"
     llm: LLMSettings = Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     mlflow: MLflowSettings = Field(default_factory=MLflowSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     logger: LoggerSettings = Field(default_factory=LoggerSettings)
     fastapi: FastAPISettings = Field(default_factory=FastAPISettings)
+    chainlit: ChainlitDatabaseSettings = Field(default_factory=ChainlitDatabaseSettings)
+    database: CacheDatabaseSettings = Field(default_factory=CacheDatabaseSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env", 

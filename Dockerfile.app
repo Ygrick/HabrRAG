@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     python3.11 \
     python3.11-dev \
     python3-pip \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание символических ссылок для python и pip
