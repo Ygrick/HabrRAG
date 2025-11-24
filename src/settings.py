@@ -69,6 +69,7 @@ class AppSettings(BaseSettings):
     cache_path: str = "./cache/answer_cache.json"
     dataset: str = "neural-bridge/rag-dataset-1200"
     split_dataset: str = "test"
+    data_loader_limit: int | None = None
     llm: LLMSettings = Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     mlflow: MLflowSettings = Field(default_factory=MLflowSettings)

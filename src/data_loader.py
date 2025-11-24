@@ -40,27 +40,30 @@ def load_local_jsonl_zst(path: str) -> list[dict]:
     return documents
 
 
-def load_documents() -> list[dict]:
+def load_documents(limit: int = None) -> list[dict]:
     """
     Загружает документы из локального файла или HuggingFace датасета.
+
+    Args:
+        limit (int, optional): Максимальное количество документов для загрузки
 
     Returns:
         list[dict]: Список словарей с полными данными документов
     """
-    # Проверяем наличие локального файла в корне проекта
     local_file = Path("habr.jsonl.zst")
 
     if local_file.exists():
         logger.info(f"Найден локальный файл: {local_file}")
-        return load_local_jsonl_zst(str(local_file))
+        docs = load_local_jsonl_zst(str(local_file))
+        if limit:
+            docs = docs[:limit]
+        return docs
 
-    # Если локального файла нет, загружаем из HuggingFace
     logger.info(
         f"Локальный файл не найден, загрузка датасета "
         f"{app_settings.dataset} из HuggingFace..."
     )
 
-    # Для датасетов со старыми скриптами загружаем напрямую из файла
     if app_settings.dataset == "IlyaGusev/habr":
         habr_url = (
             "https://huggingface.co/datasets/IlyaGusev/habr/resolve/"
@@ -76,7 +79,8 @@ def load_documents() -> list[dict]:
             app_settings.dataset, split=app_settings.split_dataset
         )
 
-    # Преобразуем dataset в список словарей
     documents = [dict(item) for item in rag_dataset]
-    logger.info(f"Датасет загружен: {len(documents)} документов")
+    if limit:
+        documents = documents[:limit]
+    logger.info(f"Датасет загружен: {len(documents)} документов (limit={limit})")
     return documents
