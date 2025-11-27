@@ -12,7 +12,6 @@ from src.chunking import chunk_documents
 from src.data_loader import load_documents
 from src.logger import logger
 from src.rag.graph import RAGGraph
-from src.rag.schemas import Document
 from src.schemas import (
     AppState,
     RAGRequest,
@@ -23,6 +22,7 @@ from src.schemas import (
 )
 from src.settings import app_settings
 from src.summarization import summarize_document
+from src.build_sources import build_sources
 from src.retrievers import (
     collection_exists_and_not_empty,
     create_ensemble_retriever,
@@ -31,37 +31,6 @@ from src.retrievers import (
 )
 
 app_state = AppState()
-
-
-def build_sources(documents: list[Document]) -> list[SourceInfo]:
-    """Группирует чанки по document_id и готовит метаданные источников."""
-    grouped: dict[int, SourceInfo] = {}
-
-    for doc in documents:
-        doc_id = doc.document_id
-        if doc_id is None or doc_id == -1:
-            continue
-
-        source = grouped.get(doc_id)
-        if not source:
-            source = SourceInfo(
-                document_id=doc_id,
-                chunk_ids=[],
-                url=doc.url,
-                preview=None,
-            )
-            grouped[doc_id] = source
-
-        if doc.chunk_id not in source.chunk_ids:
-            source.chunk_ids.append(doc.chunk_id)
-
-        if doc.url and not source.url:
-            source.url = doc.url
-
-        if not source.preview:
-            source.preview = doc.content[:200].strip()
-
-    return list(grouped.values())
 
 
 @asynccontextmanager
