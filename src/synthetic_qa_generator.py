@@ -18,33 +18,33 @@ PROMPT_QA = (
     "\nТекст:\n{chunk_content}"
 )
 
-async def generate_qa(mistral_llm: ChatMistralAI, chunk_content: str) -> dict:
+def generate_qa(mistral_llm: ChatMistralAI, chunk_content: str) -> dict:
     prompt = PROMPT_QA.format(chunk_content=chunk_content)
     structured_llm = mistral_llm.with_structured_output(ChunkQA)
     try:
-        qa_obj: ChunkQA = await structured_llm.ainvoke(prompt)
+        qa_obj: ChunkQA = structured_llm.invoke(prompt)
         return {"question": qa_obj.question.strip(), "answer": qa_obj.answer.strip()}
     except Exception as e:
         logger.error(f"Ошибка structured output вызова Mistral: {e}")
         return {"question": "", "answer": ""}
 
-async def process_chunk(mistral_llm: ChatMistralAI, chunk):
-    chunk_id = chunk.payload.get("global_chunk_id", chunk.id)
-    chunk_content = chunk.payload.get("text_markdown", chunk.payload.get("page_content", ""))
-    qa = await generate_qa(mistral_llm, chunk_content)
+def process_chunk(mistral_llm: ChatMistralAI, chunk):
+    chunk_id = chunk.payload.get("metadata").get("global_chunk_id")
+    chunk_content = chunk.payload.get("page_content", "")
+    qa = generate_qa(mistral_llm, chunk_content)
     return {"chunk_id": chunk_id, "question": qa.get("question", ""), "answer": qa.get("answer", "")}
 
-async def main(output_path="synthetic_qa.jsonl", batch_size=20, limit=None):
+def main(output_path="synthetic_qa.jsonl", batch_size=20, limit=None):
     # Инициализация LangChain Mistral LLM
     api_key = app_settings.llm.api_key.get_secret_value()
     if not api_key:
         raise ValueError("Не задан API ключ для Mistral (RAG_APP__LLM__API_KEY)")
     mistral_llm = ChatMistralAI(
-        model=app_settings.llm.model,  # например 'mistral-large-latest'
+        model="mistral-small-2501",  # например 'mistral-large-latest'
         api_key=api_key,
         temperature=app_settings.llm.temperature,
-        max_output_tokens=app_settings.llm.max_tokens,
     )
+
     # Настройка Qdrant
     qdrant_settings = app_settings.qdrant
     qdrant_kwargs = {"prefer_grpc": qdrant_settings.prefer_grpc}
@@ -79,8 +79,7 @@ async def main(output_path="synthetic_qa.jsonl", batch_size=20, limit=None):
             if limit:
                 points = points[:max(0, limit - processed)]
             tasks = [process_chunk(mistral_llm, chunk) for chunk in points]
-            results = await asyncio.gather(*tasks)
-            for item in results:
+            for item in tasks:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
                 processed += 1
                 if limit and processed >= limit:
@@ -94,4 +93,4 @@ async def main(output_path="synthetic_qa.jsonl", batch_size=20, limit=None):
     logger.info(f"Генерация завершена. Всего записей: {processed}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
