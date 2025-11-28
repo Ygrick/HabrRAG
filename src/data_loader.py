@@ -9,7 +9,7 @@ from src.logger import logger
 from src.settings import app_settings
 
 
-def load_local_jsonl_zst(path: str) -> list[str]:
+def load_local_jsonl_zst(path: str) -> list[dict]:
     """
     Загружает документы из локального файла habr.jsonl.zst.
 
@@ -17,7 +17,7 @@ def load_local_jsonl_zst(path: str) -> list[str]:
         path (str): Путь к файлу habr.jsonl.zst
 
     Returns:
-        list[str]: Список текстов документов из поля text_markdown
+        list[dict]: Список словарей с полными данными документов
     """
     logger.info(f"Чтение файла {path} с использованием zstandard...")
     documents = []
@@ -31,17 +31,7 @@ def load_local_jsonl_zst(path: str) -> list[str]:
             for line_num, line in enumerate(text_reader):
                 try:
                     data = json.loads(line.strip())
-                    # Извлекаем только поле text_markdown
-                    if 'text_markdown' in data:
-                        documents.append(data['text_markdown'])
-                    else:
-                        msg = (
-                            f"Поле 'text_markdown' не найдено "
-                            f"в документе {line_num}"
-                        )
-                        logger.warning(msg)
-                        continue
-
+                    documents.append(data)
                 except json.JSONDecodeError as e:
                     logger.warning(f"Ошибка JSON в строке {line_num}: {e}")
                     continue
@@ -50,27 +40,30 @@ def load_local_jsonl_zst(path: str) -> list[str]:
     return documents
 
 
-def load_documents() -> list[str]:
+def load_documents(limit: int = None) -> list[dict]:
     """
     Загружает документы из локального файла или HuggingFace датасета.
 
+    Args:
+        limit (int, optional): Максимальное количество документов для загрузки
+
     Returns:
-        list[str]: Список текстов документов
+        list[dict]: Список словарей с полными данными документов
     """
-    # Проверяем наличие локального файла в корне проекта
     local_file = Path("habr.jsonl.zst")
 
     if local_file.exists():
         logger.info(f"Найден локальный файл: {local_file}")
-        return load_local_jsonl_zst(str(local_file))
+        docs = load_local_jsonl_zst(str(local_file))
+        if limit:
+            docs = docs[:limit]
+        return docs
 
-    # Если локального файла нет, загружаем из HuggingFace
     logger.info(
         f"Локальный файл не найден, загрузка датасета "
         f"{app_settings.dataset} из HuggingFace..."
     )
 
-    # Для датасетов со старыми скриптами загружаем напрямую из файла
     if app_settings.dataset == "IlyaGusev/habr":
         habr_url = (
             "https://huggingface.co/datasets/IlyaGusev/habr/resolve/"
@@ -86,6 +79,8 @@ def load_documents() -> list[str]:
             app_settings.dataset, split=app_settings.split_dataset
         )
 
-    documents = rag_dataset["text_markdown"]
-    logger.info(f"Датасет загружен: {len(documents)} документов")
+    documents = [dict(item) for item in rag_dataset]
+    if limit:
+        documents = documents[:limit]
+    logger.info(f"Датасет загружен: {len(documents)} документов (limit={limit})")
     return documents

@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
         )
         # Загрузка данных
         logger.info("Загрузка документов...")
-        documents = load_documents()
+        documents = load_documents(limit=app_settings.data_loader_limit)
 
         logger.info("Чанкирование документов...")
         chunked_docs = chunk_documents(documents)

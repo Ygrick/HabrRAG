@@ -26,7 +26,7 @@ DOC_RETRIEVAL_PROMPT = """
     ```json
     {
       "relevant_documents": [
-        {"document_id": <doc_id>, "chunk_id": <chunk_id>},
+        {"document_id": <doc_id>, "global_chunk_id": <global_chunk_id>},
         ...
       ]
     }
