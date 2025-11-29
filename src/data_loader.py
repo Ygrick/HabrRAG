@@ -86,22 +86,6 @@ def load_documents() -> list[str]:
             app_settings.dataset, split=app_settings.split_dataset
         )
 
-    available_columns = list(rag_dataset.column_names)
-    target_column = "text_markdown"
-    if target_column not in available_columns:
-        for candidate in ("text", "content", "body", "article"):
-            if candidate in available_columns:
-                target_column = candidate
-                break
-        else:
-            target_column = available_columns[0]
-        logger.warning(
-            "Колонка 'text_markdown' не найдена. "
-            "Используем колонку '%s' из %s",
-            target_column,
-            available_columns,
-        )
-
-    documents = rag_dataset[target_column]
-    logger.info(f"Датасет загружен: {len(documents)} документов из колонки {target_column}")
+    documents = rag_dataset["text_markdown"]
+    logger.info(f"Датасет загружен: {len(documents)} документов")
     return documents

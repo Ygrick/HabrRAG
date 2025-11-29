@@ -4,25 +4,16 @@ import gc
 import mlflow
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from qdrant_client import QdrantClient
 
+from src.schemas import AppState, RAGRequest, RAGResponse
+from src.settings import app_settings
 from src.caching import load_answer_cache, save_answer_cache
 from src.chunking import chunk_documents
 from src.data_loader import load_documents
 from src.logger import logger
 from src.rag.graph import RAGGraph
-from src.schemas import (
-    AppState,
-    RAGRequest,
-    RAGResponse,
-    SourceInfo,
-    SummarizationRequest,
-    SummarizationResponse,
-)
-from src.settings import app_settings
-from src.summarization import summarize_document
-from src.build_sources import build_sources
 from src.retrievers import (
     collection_exists_and_not_empty,
     create_ensemble_retriever,
@@ -173,67 +164,23 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
     Returns:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
-    query = request.query.strip()
-    logger.info(f"Новый запрос: {query}")
+    logger.info(f"Новый запрос: {request.query}")
     
     # Проверка кэша
-    cached_entry = app_state.cache.get(query) if app_state.cache else None
-    if cached_entry:
+    if request.query in app_state.cache:
         logger.info("Ответ найден в кэше")
-        if isinstance(cached_entry, dict):
-            cached_sources = [
-                SourceInfo(**src) for src in cached_entry.get("sources", [])
-            ]
-            cached_answer = cached_entry.get("answer", "")
-        else:
-            cached_sources = []
-            cached_answer = str(cached_entry)
-
-        return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
+        return RAGResponse(answer=app_state.cache[request.query], from_cache=True)
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
-        rag_state = await app_state.rag_graph.run(query)
-        sources = build_sources(rag_state.documents)
-
-        # Обновляем in-memory кэш
-        if app_state.cache is not None:
-            app_state.cache[query] = {
-                "answer": rag_state.answer,
-                "sources": [src.model_dump() for src in sources],
-            }
-            await save_answer_cache(app_state.cache)
-
-        return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
+        answer = await app_state.rag_graph.run(request.query) # RAG
+        app_state.cache[request.query] = answer # Update cache
+        await save_answer_cache(app_state.cache) # Save cache
+        return RAGResponse(answer=answer, from_cache=False)
 
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса: {e}")
-        return RAGResponse(
-            answer="Ошибка при обработке запроса", from_cache=False, sources=[]
-        )
-
-
-@app.post("/summarize", response_model=SummarizationResponse)
-async def summarize_source(request: SummarizationRequest) -> SummarizationResponse:
-    """Получить суммаризацию статьи/документа по его ID."""
-    logger.info(
-        "Запрос суммаризации: document_id=%s, chunk_ids=%s",
-        request.document_id,
-        request.chunk_ids,
-    )
-
-    if not app_state.qdrant_client:
-        raise HTTPException(
-            status_code=503, detail="Qdrant клиент не инициализирован."
-        )
-
-    summary = await summarize_document(
-        document_id=request.document_id,
-        qdrant_client=app_state.qdrant_client,
-        chunk_ids=request.chunk_ids,
-    )
-
-    return SummarizationResponse(summary=summary)
+        return RAGResponse(answer="Ошибка при обработке запроса", from_cache=False)
 
 
 @app.get("/health")

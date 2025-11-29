@@ -1,8 +1,8 @@
-from typing import Optional, Any, List
+from typing import Optional, Any
 
 from langchain.retrievers import ContextualCompressionRetriever
 from qdrant_client import QdrantClient
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.rag.graph import RAGGraph
 
@@ -24,27 +24,7 @@ class RAGRequest(BaseModel):
     query: str
 
 
-class SourceInfo(BaseModel):
-    """Метаданные источников, использованных в ответе."""
-    document_id: int
-    chunk_ids: List[int]
-    url: Optional[str] = None
-    preview: Optional[str] = None
-
-
 class RAGResponse(BaseModel):
     """Модель ответа от RAG"""
     answer: str
     from_cache: bool
-    sources: List[SourceInfo] = Field(default_factory=list)
-
-
-class SummarizationRequest(BaseModel):
-    """Запрос на суммаризацию конкретного источника."""
-    document_id: int
-    chunk_ids: Optional[List[int]] = None
-
-
-class SummarizationResponse(BaseModel):
-    """Ответ с суммаризацией статьи/документа."""
-    summary: str
