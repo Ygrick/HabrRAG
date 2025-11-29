@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Optional, Any, List, Union
 
 from langchain.retrievers import ContextualCompressionRetriever
 from qdrant_client import QdrantClient
@@ -11,7 +11,6 @@ class AppState(BaseModel):
     """Состояние приложения"""
     retriever: Optional[ContextualCompressionRetriever] = None
     rag_graph: Optional[RAGGraph] = None
-    cache: Optional[dict] = None
     qdrant_client: Optional[QdrantClient] = None
     mlflow_process: Optional[Any] = None
     
@@ -28,3 +27,14 @@ class RAGResponse(BaseModel):
     """Модель ответа от RAG"""
     answer: str
     from_cache: bool
+    links: dict[int, str]
+
+
+class SummarizationRequest(BaseModel):
+    """Модель запроса для суммаризации статьи"""
+    article_url: str
+
+
+class SummarizationResponse(BaseModel):
+    """Модель ответа с суммаризацией статьи"""
+    summary: str
