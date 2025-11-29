@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -6,6 +7,7 @@ class Document(BaseModel):
     document_id: int = Field(description="ID документа")
     chunk_id: int = Field(description="ID чанка")
     content: str = Field(description="Содержимое документа")
+    url: Optional[str] = Field(default=None, description="URL оригинального источника (если доступен)")
     
     def __str__(self) -> str:
         """Красивое представление документа"""
