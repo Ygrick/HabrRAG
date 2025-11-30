@@ -9,6 +9,7 @@ from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
 
+from src.chunking import chunk_documents
 from src.settings import app_settings
 from src.logger import logger
 
@@ -214,7 +215,7 @@ def create_qdrant_only_retriever(
 
 
 def create_reranked_retriever(
-    retriever: EnsembleRetriever, top_n: int = None
+    qdrant_client: QdrantClient, top_n: int = None
 ) -> ContextualCompressionRetriever:
     """
     Оборачивает ретривер с использованием Cross-Encoder Reranker для переоценки релевантности документов.
@@ -226,6 +227,8 @@ def create_reranked_retriever(
     Returns:
         ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности документов
     """
+    documents = chunk_documents()
+    retriever: EnsembleRetriever = create_ensemble_retriever(documents, qdrant_client)
     if top_n is None:
         top_n = app_settings.retrieval.top_k
     

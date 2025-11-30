@@ -11,13 +11,10 @@ from qdrant_client import QdrantClient
 from src.schemas import AppState, RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
 from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
-from src.chunking import chunk_documents
-from src.data_loader import load_documents
 from src.logger import logger
 from src.rag.graph import RAGGraph
 from src.retrievers import (
     collection_exists_and_not_empty,
-    create_ensemble_retriever,
     create_qdrant_only_retriever,
     create_reranked_retriever,
 )
@@ -27,8 +24,7 @@ app_state = AppState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Инициализация приложения при старте и освобождение ресурсов при завершении.
+    """Инициализация приложения при старте и освобождение ресурсов при завершении.
     
     Args:
         app (FastAPI): Инстанс FastAPI приложения
@@ -68,8 +64,6 @@ async def lifespan(app: FastAPI):
             f"Коллекция '{collection_name}' уже существует и содержит данные. "
             "Пропускаем загрузку документов и используем существующую "
             "коллекцию."
-        )
-        logger.info(
             "Создание ретривера на основе существующей коллекции..."
         )
         app_state.retriever = create_qdrant_only_retriever(
@@ -80,19 +74,7 @@ async def lifespan(app: FastAPI):
             f"Коллекция '{collection_name}' не существует или пуста. "
             "Загружаем и индексируем документы..."
         )
-        # Загрузка данных
-        logger.info("Загрузка документов...")
-        documents = load_documents()
-
-        logger.info("Чанкирование документов...")
-        chunked_docs = chunk_documents(documents)
-
-        logger.info("Создание ретривера...")
-        ensemble_retriever = create_ensemble_retriever(
-            chunked_docs, app_state.qdrant_client
-        )
-        app_state.retriever = create_reranked_retriever(ensemble_retriever)
-
+        app_state.retriever = create_reranked_retriever(app_state.qdrant_client)
     logger.info("Ретривер создан и готов к использованию")
     
     # Инициализация RAG графа
@@ -100,16 +82,12 @@ async def lifespan(app: FastAPI):
     rag_graph = RAGGraph(retriever=app_state.retriever)
     app_state.rag_graph = rag_graph
     logger.info("RAG граф инициализирован")
-    
     logger.info("Приложение инициализировано успешно")
     
     yield
     
     logger.info("Завершение работы приложения...")
-    
-    # Очистка ресурсов
     logger.info("Освобождение ресурсов...")
-    
     # Удаляем ссылки на большие объекты
     qdrant_client = app_state.qdrant_client
     app_state.rag_graph = None

@@ -79,9 +79,13 @@ class RAGGraph:
         for doc in relevant_docs:
             state.documents.append(
                 Document(
-                    document_id=doc.metadata.get("document_id", -1),
-                    chunk_id=doc.metadata.get("chunk_id", -1),
-                    content=doc.page_content
+                    id=doc.metadata.get("id", -1),
+                    author=doc.metadata.get("author", "Unknown"),
+                    url=doc.metadata.get("url", ""),
+                    title=doc.metadata.get("title", ""),
+                    document_chunk_id=doc.metadata.get("document_chunk_id", -1),
+                    global_chunk_id=doc.metadata.get("global_chunk_id", -1),
+                    text_markdown=doc.page_content
                 )
             )
         logger.info(f"Найдено {len(state.documents)} релевантных документов")
