@@ -13,7 +13,7 @@ dependencies = [
     "faiss-cpu==1.12.0",
     "rank_bm25==0.2.2",
     "mlflow==3.4.0",
-    "datasets==4.1.1",
+    "datasets==3.6.0",
     "torch==2.5.1",
     "sentence-transformers==5.0.0",
     "langchain-qdrant>=0.2.1",
