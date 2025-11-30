@@ -1,4 +1,4 @@
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Union
 
 from langchain.retrievers import ContextualCompressionRetriever
 from qdrant_client import QdrantClient
@@ -11,7 +11,6 @@ class AppState(BaseModel):
     """Состояние приложения"""
     retriever: Optional[ContextualCompressionRetriever] = None
     rag_graph: Optional[RAGGraph] = None
-    cache: Optional[dict] = None
     qdrant_client: Optional[QdrantClient] = None
     mlflow_process: Optional[Any] = None
     

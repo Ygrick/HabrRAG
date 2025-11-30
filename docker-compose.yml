@@ -19,20 +19,50 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.14.1
     container_name: habrrag_mlflow
     ports:
-      - "5000:5000"
+      - "5001:5001"
     volumes:
       - mlflow_data:/mlflow
     environment:
       - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+    command: mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+    networks:
+      - habrrag_network
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=chainlit_user
+      - POSTGRES_PASSWORD=chainlit_pass
+      - POSTGRES_DB=postgres_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    networks:
+      - habrrag_network
+
+  pgadmin:
+    image: dpage/pgadmin4:7
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
     networks:
       - habrrag_network
 
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.app
     container_name: habrrag_app
     ports:
       - "8000:8000"
@@ -42,13 +72,6 @@ services:
       - mlartifacts_data:/app/mlartifacts
     env_file:
       - .env
-    environment:
-      - RAG_APP__QDRANT__URL=http://qdrant:6333
-      - RAG_APP__QDRANT__PREFER_GRPC=false
-      - RAG_APP__MLFLOW__TRACKING_URI=http://mlflow:5000
-      - RAG_APP__MLFLOW__ENABLED=true
-      - RAG_APP__FASTAPI__HOST=0.0.0.0
-      - RAG_APP__FASTAPI__PORT=8000
     deploy:
       resources:
         reservations:
@@ -61,6 +84,38 @@ services:
       - mlflow
     networks:
       - habrrag_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  chainlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.chainlit
+    container_name: habrrag_chainlit
+    ports:
+      - "8001:8001"
+    volumes:
+      - cache_data:/app/cache
+      - mlruns_data:/app/mlruns
+      - mlartifacts_data:/app/mlartifacts
+    env_file:
+      - .env
+    command: chainlit run chainlit_app.py --host 0.0.0.0 --port 8001
+    depends_on:
+        app:
+          condition: service_healthy
+        qdrant:
+          condition: service_started
+        mlflow:
+          condition: service_started
+        db:
+          condition: service_started
+    networks:
+      - habrrag_network
 
 volumes:
   qdrant_data:
@@ -68,6 +123,8 @@ volumes:
   cache_data:
   mlruns_data:
   mlartifacts_data:
+  db-data:
+  pgadmin-data:
 
 networks:
   habrrag_network:

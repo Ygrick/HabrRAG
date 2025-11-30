@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import gc
+import re
 
 import mlflow
 import torch
@@ -7,7 +8,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from qdrant_client import QdrantClient
 
-from src.caching import load_answer_cache, save_answer_cache
+from src.rag.schemas import Document
+from src.schemas import AppState, RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
+from src.settings import app_settings
+from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
 from src.chunking import chunk_documents
 from src.data_loader import load_documents
 from src.logger import logger
@@ -109,21 +113,11 @@ async def lifespan(app: FastAPI):
     app_state.rag_graph = rag_graph
     logger.info("RAG граф инициализирован")
     
-    # Загрузка кэша ответов
-    logger.info("Загрузка кэша ответов...")
-    app_state.cache = await load_answer_cache()
-    logger.info(f"Кэш загружен: {len(app_state.cache)} ответов")
-    
     logger.info("Приложение инициализировано успешно")
     
     yield
     
     logger.info("Завершение работы приложения...")
-    
-    # Сохранение кэша перед завершением
-    if app_state.cache:
-        await save_answer_cache(app_state.cache)
-        logger.info("Кэш сохранён")
     
     # Очистка ресурсов
     logger.info("Освобождение ресурсов...")
@@ -132,7 +126,6 @@ async def lifespan(app: FastAPI):
     qdrant_client = app_state.qdrant_client
     app_state.rag_graph = None
     app_state.retriever = None
-    app_state.cache = None
     app_state.qdrant_client = None
     
     # Очищаем сборщик мусора
@@ -154,6 +147,16 @@ async def lifespan(app: FastAPI):
     
     logger.info("Приложение завершено")
 
+def parse_sources(text: str) -> dict[int, str]:
+    # заглушка для парсинга источников из текста ответа
+    # [1] ... - http://...
+    pattern = r"\[(\d+)\].*?-\s*(https?://[^\s\"']+)"
+    
+    matches = re.findall(pattern, text)
+    
+    # return {int(num): url for num, url in matches}
+    return {1:"https://habr.com/ru/companies/ru_mts/articles/965622/",
+            2: "https://habr.com/ru/companies/avito/articles/966018/"}
 
 app = FastAPI(
     title="RAG API",
@@ -174,35 +177,28 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
     query = request.query.strip()
+
     logger.info(f"Новый запрос: {query}")
     
-    # Проверка кэша
-    cached_entry = app_state.cache.get(query) if app_state.cache else None
+    cached_entry = await get_cached_answer(query)
     if cached_entry:
         logger.info("Ответ найден в кэше")
-        if isinstance(cached_entry, dict):
-            cached_sources = [
-                SourceInfo(**src) for src in cached_entry.get("sources", [])
-            ]
-            cached_answer = cached_entry.get("answer", "")
-        else:
-            cached_sources = []
-            cached_answer = str(cached_entry)
+        
+        documents = [Document(**doc) for doc in cached_entry.get("documents", [])]
+        cached_sources = build_sources(documents)
+
+        print (cached_sources)
+        cached_answer = cached_entry.get("answer", "")
 
         return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
         rag_state = await app_state.rag_graph.run(query)
+
         sources = build_sources(rag_state.documents)
 
-        # Обновляем in-memory кэш
-        if app_state.cache is not None:
-            app_state.cache[query] = {
-                "answer": rag_state.answer,
-                "sources": [src.model_dump() for src in sources],
-            }
-            await save_answer_cache(app_state.cache)
+        await set_cached_answer(query, rag_state)
 
         return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
 
@@ -238,10 +234,11 @@ async def summarize_source(request: SummarizationRequest) -> SummarizationRespon
 
 @app.get("/health")
 async def health_check():
+    cache_count = await get_cache_count()
     return {
         "status": "ok",
         "message": "RAG запущен",
-        "cached_answers": len(app_state.cache) if app_state.cache else 0
+        "cached_answers": cache_count
     }
 
 

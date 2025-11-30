@@ -89,7 +89,7 @@ def load_documents() -> list[str]:
     available_columns = list(rag_dataset.column_names)
     target_column = "text_markdown"
     if target_column not in available_columns:
-        for candidate in ("text", "content", "body", "article"):
+        for candidate in (app_settings.dataset_column, "text", "content", "body", "article"):
             if candidate in available_columns:
                 target_column = candidate
                 break
