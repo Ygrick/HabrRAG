@@ -61,7 +61,7 @@ mlflow server --host 127.0.0.1 --port 5001
 
 ```bash
 # Установить зависимости
-uv sync
+uv sync --all-extras
 
 # Запуск приложения
 uv run main.py
