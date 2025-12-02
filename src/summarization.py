@@ -8,7 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
 
 from src.logger import logger
-from src.prompts import SUMMARIZATION_PROMPT
+from src.rag.prompts import SUMMARIZATION_PROMPT
 from src.settings import app_settings
 
 # Ограничиваем длину текста для суммаризации, чтобы не переполнить контекст LLM

@@ -44,8 +44,8 @@ def chunk_documents(chunk_size: int = 1000, chunk_overlap: int = 100) -> list[Do
             chunk.metadata["author"] = doc_data.get('author', 'Unknown')  # Автор
             chunk.metadata["url"] = doc_data.get('url', '')  # Ссылка на статью
             chunk.metadata["title"] = doc_data.get('title', '')  # Заголовок статьи
-            chunk.metadata["document_chunk_id"] = j + 1  # ID чанка внутри документа
-            chunk.metadata["global_chunk_id"] = global_chunk_id  # Глобальный ID чанка
+            chunk.metadata["document_id"] = j + 1  # ID чанка внутри документа
+            chunk.metadata["chunk_id"] = global_chunk_id  # Глобальный ID чанка
             global_chunk_id += 1
             chunked_documents.append(chunk)
 

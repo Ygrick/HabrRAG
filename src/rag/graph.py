@@ -5,7 +5,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src.settings import app_settings
 from src.logger import logger
-from src.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT, PARAPHRASE_PROMPT
+from src.rag.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT, PARAPHRASE_PROMPT
 from src.rag.schemas import Document
 from src.rag.state import RAGState
 
