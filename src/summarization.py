@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
