@@ -87,7 +87,7 @@ def _fetch_chunks(
             if not content:
                 continue
 
-            collected.append((int(chunk_id) if chunk_id is not None else 0, content))
+            collected.append((int(chunk_id or 0), content))
             if len(collected) >= MAX_SUMMARY_CHUNKS:
                 break
 
@@ -114,10 +114,6 @@ async def summarize_document(
     Returns:
         str: Суммаризация статьи или сообщение об ошибке
     """
-    if qdrant_client is None:
-        logger.error("Qdrant клиент не инициализирован для суммаризации")
-        return "Хранилище источников недоступно: Qdrant клиент не инициализирован."
-
     chunks = _fetch_chunks(qdrant_client, document_id, chunk_ids)
     if not chunks:
         return f"Не удалось найти текст для источника {document_id}."
@@ -126,9 +122,7 @@ async def summarize_document(
     if len(joined_text) > MAX_SUMMARIZATION_CHARS:
         logger.info(
             "Обрезаем текст для суммаризации документа %s: %d символов -> %d",
-            document_id,
-            len(joined_text),
-            MAX_SUMMARIZATION_CHARS,
+            document_id, len(joined_text), MAX_SUMMARIZATION_CHARS
         )
         joined_text = joined_text[:MAX_SUMMARIZATION_CHARS]
 

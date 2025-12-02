@@ -221,16 +221,15 @@ def create_reranked_retriever(
     Оборачивает ретривер с использованием Cross-Encoder Reranker для переоценки релевантности документов.
 
     Args:
-        retriever (EnsembleRetriever): Базовый ретривер для первоначального поиска
+        qdrant_client (QdrantClient): Клиент Qdrant
         top_n (int, optional): Количество документов, сохраняемых после переоценки. По умолчанию берётся из settings
     
     Returns:
         ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности документов
     """
     documents = chunk_documents()
-    retriever: EnsembleRetriever = create_ensemble_retriever(documents, qdrant_client)
-    if top_n is None:
-        top_n = app_settings.retrieval.top_k
+    retriever = create_ensemble_retriever(documents, qdrant_client)
+    top_n = top_n or app_settings.retrieval.top_k
     
     logger.info("Инициализация модели кросс-энкодера для reranking...")
     cross_encoder = HuggingFaceCrossEncoder(model_name=app_settings.retrieval.cross_encoder)

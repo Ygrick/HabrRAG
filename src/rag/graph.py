@@ -13,27 +13,16 @@ from src.rag.state import RAGState
 class RAGGraph:
     def __init__(self, retriever: ContextualCompressionRetriever):
         self.retriever = retriever
-        self.filter_docs_llm = ChatOpenAI(
-            model=app_settings.llm.model,
-            temperature=app_settings.llm.temperature,
-            max_tokens=app_settings.llm.max_tokens,
-            base_url=app_settings.llm.base_url,
-            api_key=app_settings.llm.api_key.get_secret_value(),
-        )
-        self.paraphrase_llm = ChatOpenAI(
-            model=app_settings.llm.model,
-            temperature=app_settings.llm.temperature,
-            max_tokens=app_settings.llm.max_tokens,
-            base_url=app_settings.llm.base_url,
-            api_key=app_settings.llm.api_key.get_secret_value(),
-        )
-        self.generate_answer_llm = ChatOpenAI(
-            model=app_settings.llm.model,
-            temperature=app_settings.llm.temperature,
-            max_tokens=app_settings.llm.max_tokens,
-            base_url=app_settings.llm.base_url,
-            api_key=app_settings.llm.api_key.get_secret_value(),
-        )
+        self._llm_kwargs = {
+            "model": app_settings.llm.model,
+            "temperature": app_settings.llm.temperature,
+            "max_tokens": app_settings.llm.max_tokens,
+            "base_url": app_settings.llm.base_url,
+            "api_key": app_settings.llm.api_key.get_secret_value(),
+        }
+        self.filter_docs_llm = ChatOpenAI(**self._llm_kwargs)
+        self.paraphrase_llm = ChatOpenAI(**self._llm_kwargs)
+        self.generate_answer_llm = ChatOpenAI(**self._llm_kwargs)
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -72,51 +61,48 @@ class RAGGraph:
         """Поиск релевантных документов."""
         logger.info(f"Поиск документов для запроса: {state.query}")
         
-        # Вызов ретривера
         relevant_docs = await self.retriever.ainvoke(state.query)
-
-        # Обновление состояния
-        for doc in relevant_docs:
-            state.documents.append(
-                Document(
-                    id=doc.metadata.get("id", -1),
-                    author=doc.metadata.get("author", "Unknown"),
-                    title=doc.metadata.get("title", ""),
-                    document_id=doc.metadata.get("document_id", -1),
-                    chunk_id=doc.metadata.get("chunk_id", -1),
-                    content=doc.page_content,
-                    url=doc.metadata.get("url", None),
-                )
+        state.documents.extend(
+            Document(
+                id=doc.metadata.get("id", -1),
+                author=doc.metadata.get("author", "Unknown"),
+                title=doc.metadata.get("title", ""),
+                document_id=doc.metadata.get("document_id", -1),
+                chunk_id=doc.metadata.get("chunk_id", -1),
+                content=doc.page_content,
+                url=doc.metadata.get("url"),
             )
+            for doc in relevant_docs
+        )
         logger.info(f"Найдено {len(state.documents)} релевантных документов")
         return state
+
+    def _format_docs_data(self, documents: list[Document]) -> str:
+        """Форматирует документы для передачи в LLM."""
+        return "\n\n".join(str(doc) for doc in documents)
 
     async def _identify_relevant_docs(self, state: RAGState) -> RAGState:
         """Идентификация релевантных ID документов."""
         logger.info("Идентификация релевантных документов")
-
-        docs_data = "\n\n".join([str(doc) for doc in state.documents])
+        docs_data = self._format_docs_data(state.documents)
         response = await self.filter_docs_llm.ainvoke([
             SystemMessage(content=DOC_RETRIEVAL_PROMPT),
             HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
         state.doc_ids = response.content
-        
-        logger.info(f"Идентификация завершена")
+        logger.info("Идентификация завершена")
         return state
 
     async def _generate_answer(self, state: RAGState) -> RAGState:
         """Генерация ответа."""
         logger.info("Генерация ответа")
-
-        docs_data = "\n\n".join([str(doc) for doc in state.documents])
+        docs_data = self._format_docs_data(state.documents)
         response = await self.generate_answer_llm.ainvoke([
             SystemMessage(content=ANSWER_GENERATION_PROMPT.format(retrieved_data=state.doc_ids)),
             HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
         state.answer = response.content
-
-        logger.info(f"Ответ сгенерирован успешно")
+        logger.info("Ответ сгенерирован успешно")
         return state
 
     async def run(self, query: str) -> RAGState:
@@ -124,12 +110,10 @@ class RAGGraph:
         logger.info(f"Запуск RAG пайплайна: {query}")
         
         try:
-            initial_state = RAGState(query=query)
-            result = await self.graph.ainvoke(initial_state)
+            result = await self.graph.ainvoke(RAGState(query=query))
             result_state = RAGState(**result)
             logger.info(f"Результат: {result_state.answer}")
             return result_state
         except Exception as e:
             logger.error(f"Ошибка в RAG пайплайне: {e}", exc_info=True)
-            # Возвращаем состояние с ошибкой, чтобы вызывающий код мог обработать
             return RAGState(query=query, answer="Произошла ошибка при генерации ответа.")

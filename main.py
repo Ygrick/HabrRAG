@@ -33,10 +33,12 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
     cached_entry = await get_cached_answer(query)
     if cached_entry:
         logger.info("Ответ найден в кэше")
-        documents = [Document(**doc) for doc in cached_entry.get("documents", [])]
-        cached_sources = build_sources(documents)
-        cached_answer = cached_entry.get("answer", "")
-        return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
+        documents = [Document(**doc) for doc in cached_entry["documents"]]
+        return RAGResponse(
+            answer=cached_entry["answer"],
+            from_cache=True,
+            sources=build_sources(documents)
+        )
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:

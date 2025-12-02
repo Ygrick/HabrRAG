@@ -77,8 +77,7 @@ async def lifespan(app: FastAPI):
     
     # Инициализация RAG графа
     logger.info("Инициализация RAG графа...")
-    rag_graph = RAGGraph(retriever=app_state.retriever)
-    app_state.rag_graph = rag_graph
+    app_state.rag_graph = RAGGraph(retriever=app_state.retriever)
     logger.info("RAG граф инициализирован")
     logger.info("Приложение инициализировано успешно")
     
@@ -86,10 +85,9 @@ async def lifespan(app: FastAPI):
     
     logger.info("Завершение работы приложения...")
     logger.info("Освобождение ресурсов...")
-    # Удаляем ссылки на большие объекты
-    qdrant_client = app_state.qdrant_client
     app_state.rag_graph = None
     app_state.retriever = None
+    qdrant_client = app_state.qdrant_client
     app_state.qdrant_client = None
     
     # Очищаем сборщик мусора

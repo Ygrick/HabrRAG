@@ -14,19 +14,18 @@ def build_sources(documents: list[Document]) -> list[SourceInfo]:
     grouped: dict[int, SourceInfo] = {}
 
     for doc in documents:
-        doc_id = doc.document_id
-        if doc_id is None or doc_id == -1:
+        if doc.document_id == -1:
             continue
 
-        source = grouped.get(doc_id)
-        if not source:
-            source = SourceInfo(
-                document_id=doc_id,
+        source = grouped.setdefault(
+            doc.document_id,
+            SourceInfo(
+                document_id=doc.document_id,
                 chunk_ids=[],
                 url=doc.url,
                 preview=None,
             )
-            grouped[doc_id] = source
+        )
 
         if doc.chunk_id not in source.chunk_ids:
             source.chunk_ids.append(doc.chunk_id)
