@@ -19,8 +19,8 @@ class Document(BaseModel):
             f"Title: {self.title}",
             f"Author: {self.author}",
             f"URL: {self.url}",
-            f"Document Chunk ID: {self.document_id}",
-            f"Global Chunk ID: {self.chunk_id}",
-            f"Text: {self.content}",
+            f"Document ID: {self.document_id}",
+            f"Chunk ID: {self.chunk_id}",
+            f"Content: {self.content}",
         ]
         return "\n\n".join(paths)

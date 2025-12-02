@@ -81,11 +81,11 @@ class RAGGraph:
                 Document(
                     id=doc.metadata.get("id", -1),
                     author=doc.metadata.get("author", "Unknown"),
-                    url=doc.metadata.get("url", ""),
                     title=doc.metadata.get("title", ""),
                     document_id=doc.metadata.get("document_id", -1),
                     chunk_id=doc.metadata.get("chunk_id", -1),
                     content=doc.page_content,
+                    url=doc.metadata.get("url", ""),
                 )
             )
         logger.info(f"Найдено {len(state.documents)} релевантных документов")
