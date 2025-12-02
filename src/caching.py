@@ -1,7 +1,9 @@
 import asyncpg
+import json
 
 from src.logger import logger
 from src.settings import app_settings
+from src.rag.state import RAGState
 
 
 async def get_db_connection() -> asyncpg.Connection:
@@ -30,8 +32,11 @@ async def load_answer_cache() -> dict:
     conn = await get_db_connection()
     try:
         rows = await conn.fetch(f"SELECT query, response FROM {app_settings.database.cache_table}")
-        cache = {row['query']: row['response'] for row in rows}
+        cache = {row['query']: json.loads(row['response']) for row in rows}
         return cache
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка декодирования JSON в кэше: {e}")
+        return {}
     except Exception as e:
         logger.error(f"Ошибка загрузки кэша ответов: {e}")
         return {}
@@ -48,10 +53,9 @@ async def save_answer_cache(cache: dict) -> None:
     """
     conn = await get_db_connection()
     try:
-        # Очистить таблицу и вставить новые данные
         await conn.execute(f"DELETE FROM {app_settings.database.cache_table}")
         if cache:
-            values = [(query, response) for query, response in cache.items()]
+            values = [(query, json.dumps(response)) for query, response in cache.items()]
             await conn.executemany(f"INSERT INTO {app_settings.database.cache_table} (query, response) VALUES ($1, $2)", values)
         logger.info("Кэш ответов сохранен в базу данных.")
     except Exception as e:
@@ -60,7 +64,7 @@ async def save_answer_cache(cache: dict) -> None:
         await conn.close()
 
 
-async def get_cached_answer(query: str) -> str | None:
+async def get_cached_answer(query: str) -> dict | None:
     """
     Получает кэшированный ответ для запроса из базы данных.
     
@@ -68,12 +72,31 @@ async def get_cached_answer(query: str) -> str | None:
         query (str): Запрос
     
     Returns:
-        str | None: Кэшированный ответ или None, если не найден
+        dict | None: Кэшированный ответ с documents, doc_ids, answer или None, если не найден
     """
     conn = await get_db_connection()
     try:
         row = await conn.fetchrow(f"SELECT response FROM {app_settings.database.cache_table} WHERE query = $1", query)
-        return row['response'] if row else None
+        print (row)
+        print (type(row))
+        if row:
+            response_data = json.loads(row['response'])
+            print (response_data)
+            print (type(response_data))
+            print ({
+                "documents": response_data.get("documents", []),
+                "doc_ids": response_data.get("doc_ids", ""),
+                "answer": response_data.get("answer", "")
+            })
+            return {
+                "documents": response_data.get("documents", []),
+                "doc_ids": response_data.get("doc_ids", ""),
+                "answer": response_data.get("answer", "")
+            }
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка декодирования JSON для запроса '{query}': {e}")
+        return None
     except Exception as e:
         logger.error(f"Ошибка получения кэшированного ответа: {e}")
         return None
@@ -81,18 +104,23 @@ async def get_cached_answer(query: str) -> str | None:
         await conn.close()
 
 
-async def set_cached_answer(query: str, response: str) -> None:
+async def set_cached_answer(init_query: str, rag_state: RAGState) -> None:
     """
-    Сохраняет ответ в кэш в базе данных.
+    Сохраняет RAGState в кэш в базе данных.
     
     Args:
         query (str): Запрос
-        response (str): Ответ
+        rag_state (RAGState): Состояние RAG
     """
     conn = await get_db_connection()
     try:
-        await conn.execute(f"INSERT INTO {app_settings.database.cache_table} (query, response) VALUES ($1, $2) ON CONFLICT (query) DO UPDATE SET response = EXCLUDED.response, created_at = CURRENT_TIMESTAMP", query, response)
-        logger.info(f"Ответ для запроса '{query}' сохранен в кэш.")
+        response_data = {
+            "documents": [doc.model_dump() for doc in rag_state.documents],
+            "doc_ids": rag_state.doc_ids,
+            "answer": rag_state.answer
+        }
+        await conn.execute(f"INSERT INTO {app_settings.database.cache_table} (query, response) VALUES ($1, $2) ON CONFLICT (query) DO UPDATE SET response = EXCLUDED.response, created_at = CURRENT_TIMESTAMP", init_query, json.dumps(response_data))
+        logger.info(f"Ответ для запроса '{init_query}' сохранен в кэш.")
     except Exception as e:
         logger.error(f"Ошибка сохранения ответа в кэш: {e}")
     finally:

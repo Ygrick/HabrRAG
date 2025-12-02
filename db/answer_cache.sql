@@ -2,6 +2,6 @@
 
 CREATE TABLE IF NOT EXISTS answer_cache (
     query TEXT PRIMARY KEY,
-    response TEXT NOT NULL,
+    response JSONB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -58,19 +58,21 @@ async def on_message(message: cl.Message):
             response = await client.post(
                 f"{FASTAPI_SERVICE_URL}/answer",
                 json={"query": message.content},
-                timeout=30.0
+                timeout=60.0
             )
             if response.status_code == 200:
                 data = response.json()
+
                 answer = data["answer"]
-                buttons = data["links"] 
+                buttons = [(source['document_id'], source['url']) for source in data["sources"]] 
+                logger.info(buttons)
                 actions = [
                     cl.Action(
                         name="button",
-                        payload={"num": num, "url": buttons[num]},
-                        label=str(num)
+                        payload={"num_button": num_button+1, "document_id": document_id, 'url': url},
+                        label=str(num_button+1)
                     )
-                    for num in buttons.keys()
+                    for num_button, (document_id, url) in enumerate(buttons)
                 ]
             else:
                 answer = f"Ошибка при получении ответа от сервера (статус: {response.status_code})"
@@ -88,25 +90,31 @@ async def on_message(message: cl.Message):
 
 @cl.action_callback("button")
 async def handle_button(action):
-    url = action.payload["url"]
+    document_id = action.payload["document_id"]
+    num_button = action.payload["num_button"]
+    url = action.payload.get("url", "")
+    url_part = f"(URL {url})" if url else ""
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{FASTAPI_SERVICE_URL}/summarize",
-                json={"article_url": url},
+                json={"document_id": document_id},
                 timeout=40.0
             )
             if response.status_code == 200:
                 data = response.json()
                 summary = data["summary"]
-                await cl.Message(content=f"Суммаризация статьи с URL {url}:\n{summary}").send()
+                await cl.Message(
+                    content=f"Суммаризация статьи №{num_button} {url_part}:\n{summary}"
+                ).send()
             else:
-                await cl.Message(content=f"Ошибка при получении суммаризации статьи с URL {url} (статус: {response.status_code})").send()
+                await cl.Message(content=f"Ошибка при получении суммаризации статьи №{num_button}, document_id {document_id} {url_part} (статус: {response.status_code})").send()
     except httpx.TimeoutException:
-        await cl.Message(content=f"Таймаут при суммаризации статьи с URL {url}").send()
+        await cl.Message(content=f"Таймаут при суммаризации статьи  №{num_button}, document_id {document_id} {url_part}").send()
     except Exception as e:
         logger.error(f"Ошибка при запросе суммаризации: {e}")
-        await cl.Message(content=f"Ошибка при суммаризации статьи с URL {url}: {str(e)}").send()
+        await cl.Message(content=f"Ошибка при суммаризации статьи  №{num_button}, document_id {document_id} {url_part}: {str(e)}").send()
 
 
 if __name__ == "__main__":
