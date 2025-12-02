@@ -77,17 +77,8 @@ async def get_cached_answer(query: str) -> dict | None:
     conn = await get_db_connection()
     try:
         row = await conn.fetchrow(f"SELECT response FROM {app_settings.database.cache_table} WHERE query = $1", query)
-        print (row)
-        print (type(row))
         if row:
             response_data = json.loads(row['response'])
-            print (response_data)
-            print (type(response_data))
-            print ({
-                "documents": response_data.get("documents", []),
-                "doc_ids": response_data.get("doc_ids", ""),
-                "answer": response_data.get("answer", "")
-            })
             return {
                 "documents": response_data.get("documents", []),
                 "doc_ids": response_data.get("doc_ids", ""),

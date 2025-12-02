@@ -62,8 +62,7 @@ async def lifespan(app: FastAPI):
         logger.info(
             f"Коллекция '{collection_name}' уже существует и содержит данные. "
             "Пропускаем загрузку документов и используем существующую "
-            "коллекцию."
-            "Создание ретривера на основе существующей коллекции..."
+            "коллекцию. Создание ретривера на основе существующей коллекции..."
         )
         app_state.retriever = create_qdrant_only_retriever(
             app_state.qdrant_client

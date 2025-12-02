@@ -85,7 +85,7 @@ class RAGGraph:
                     document_id=doc.metadata.get("document_id", -1),
                     chunk_id=doc.metadata.get("chunk_id", -1),
                     content=doc.page_content,
-                    url=doc.metadata.get("url", ""),
+                    url=doc.metadata.get("url", None),
                 )
             )
         logger.info(f"Найдено {len(state.documents)} релевантных документов")

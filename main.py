@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from src.schemas import RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
-from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
+from src.caching import get_cached_answer, set_cached_answer, get_cache_count
 from src.logger import logger
 from src.lifespan import lifespan, app_state
 from src.build_sources import build_sources
@@ -28,29 +28,21 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
     query = request.query.strip()
-
     logger.info(f"Новый запрос: {query}")
     
     cached_entry = await get_cached_answer(query)
     if cached_entry:
         logger.info("Ответ найден в кэше")
-        
         documents = [Document(**doc) for doc in cached_entry.get("documents", [])]
         cached_sources = build_sources(documents)
-
-        print (cached_sources)
         cached_answer = cached_entry.get("answer", "")
-
         return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
         rag_state = await app_state.rag_graph.run(query)
-
         sources = build_sources(rag_state.documents)
-
         await set_cached_answer(query, rag_state)
-
         return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
 
     except Exception as e:
