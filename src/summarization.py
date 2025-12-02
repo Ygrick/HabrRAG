@@ -15,20 +15,14 @@ MAX_SUMMARIZATION_CHARS = 12_000
 MAX_SUMMARY_CHUNKS = 50
 # Размер страницы при скролле коллекции
 SCROLL_PAGE_SIZE = 64
-
-
-def _prepare_summary_llm() -> ChatOpenAI:
-    """Создание LLM для суммаризации источников."""
-    return ChatOpenAI(
-        model=app_settings.llm.model,
-        temperature=0.3,
-        max_tokens=min(app_settings.llm.max_tokens, 512),
-        base_url=app_settings.llm.base_url,
-        api_key=app_settings.llm.api_key.get_secret_value(),
-    )
-
-
-summary_llm = _prepare_summary_llm()
+# LLM для суммаризации источников
+summary_llm = ChatOpenAI(
+    model=app_settings.llm.model,
+    temperature=0.3,
+    max_tokens=min(app_settings.llm.max_tokens, 512),
+    base_url=app_settings.llm.base_url,
+    api_key=app_settings.llm.api_key.get_secret_value(),
+)
 
 
 def _fetch_chunks(
