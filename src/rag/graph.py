@@ -83,9 +83,9 @@ class RAGGraph:
                     author=doc.metadata.get("author", "Unknown"),
                     url=doc.metadata.get("url", ""),
                     title=doc.metadata.get("title", ""),
-                    document_chunk_id=doc.metadata.get("document_chunk_id", -1),
-                    global_chunk_id=doc.metadata.get("global_chunk_id", -1),
-                    text_markdown=doc.page_content
+                    document_id=doc.metadata.get("document_id", -1),
+                    chunk_id=doc.metadata.get("chunk_id", -1),
+                    content=doc.page_content,
                 )
             )
         logger.info(f"Найдено {len(state.documents)} релевантных документов")
@@ -119,20 +119,17 @@ class RAGGraph:
         logger.info(f"Ответ сгенерирован успешно")
         return state
 
-    async def run(self, query: str) -> str:
-        """Запускает RAG пайплайн."""
+    async def run(self, query: str) -> RAGState:
+        """Запускает RAG пайплайн и возвращает итоговое состояние."""
         logger.info(f"Запуск RAG пайплайна: {query}")
         
         try:
-            # Инициализация состояния
             initial_state = RAGState(query=query)
-            
-            # Запуск графа
             result = await self.graph.ainvoke(initial_state)
-            result = RAGState(**result)
-            logger.info(f"Результат: {result.answer}")
-            return result.answer
-        
+            result_state = RAGState(**result)
+            logger.info(f"Результат: {result_state.answer}")
+            return result_state
         except Exception as e:
             logger.error(f"Ошибка в RAG пайплайне: {e}", exc_info=True)
-            return "Произошла ошибка при генерации ответа."
+            # Возвращаем состояние с ошибкой, чтобы вызывающий код мог обработать
+            return RAGState(query=query, answer="Произошла ошибка при генерации ответа.")

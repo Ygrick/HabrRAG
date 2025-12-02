@@ -1,24 +1,13 @@
-import re
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from src.schemas import RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
 from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
 from src.logger import logger
 from src.lifespan import lifespan, app_state
-
-
-def parse_sources(text: str) -> dict[int, str]:
-    # заглушка для парсинга источников из текста ответа
-    # [1] ... - http://...
-    pattern = r"\[(\d+)\].*?-\s*(https?://[^\s\"']+)"
-    
-    matches = re.findall(pattern, text)
-    
-    # return {int(num): url for num, url in matches}
-    return {1:"https://habr.com/ru/companies/ru_mts/articles/965622/",
-            2: "https://habr.com/ru/companies/avito/articles/966018/"}
-
+from src.build_sources import build_sources
+from src.rag.schemas import Document
+from src.summarization import summarize_document
 
 app = FastAPI(
     title="RAG API",
@@ -41,37 +30,56 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
     query = request.query.strip()
 
     logger.info(f"Новый запрос: {query}")
-
     
-    cached_answer = await get_cached_answer(query)
-    if cached_answer:
+    cached_entry = await get_cached_answer(query)
+    if cached_entry:
         logger.info("Ответ найден в кэше")
-        return RAGResponse(answer=cached_answer, from_cache=True, links=parse_sources(cached_answer))
+        
+        documents = [Document(**doc) for doc in cached_entry.get("documents", [])]
+        cached_sources = build_sources(documents)
+
+        print (cached_sources)
+        cached_answer = cached_entry.get("answer", "")
+
+        return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
-        answer = await app_state.rag_graph.run(query)
-        await set_cached_answer(query, answer)
-        return RAGResponse(answer=answer, from_cache=False, links=parse_sources(answer))
+        rag_state = await app_state.rag_graph.run(query)
+
+        sources = build_sources(rag_state.documents)
+
+        await set_cached_answer(query, rag_state)
+
+        return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
+
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса: {e}")
-        return RAGResponse(answer="Ошибка при обработке запроса", from_cache=False, links={})
+        return RAGResponse(
+            answer="Ошибка при обработке запроса", from_cache=False, sources=[]
+        )
 
 
 @app.post("/summarize", response_model=SummarizationResponse)
-async def summarize_article(request: SummarizationRequest) -> SummarizationResponse:
-    """Получить суммаризацию статьи по её ID.
-    
-    Args:
-        request (SummarizationRequest): URL статьи
-    
-    Returns:
-        SummarizationResponse: Суммаризация статьи
-    """
-    logger.info(f"Запрос суммаризации статьи: {request.article_url}")
-    
-    summary = f"Это заглушка для суммаризации статьи с URL {request.article_url}."
-    
+async def summarize_source(request: SummarizationRequest) -> SummarizationResponse:
+    """Получить суммаризацию статьи/документа по его ID."""
+    logger.info(
+        "Запрос суммаризации: document_id=%s, chunk_ids=%s",
+        request.document_id,
+        request.chunk_ids,
+    )
+
+    if not app_state.qdrant_client:
+        raise HTTPException(
+            status_code=503, detail="Qdrant клиент не инициализирован."
+        )
+
+    summary = await summarize_document(
+        document_id=request.document_id,
+        qdrant_client=app_state.qdrant_client,
+        chunk_ids=request.chunk_ids,
+    )
+
     return SummarizationResponse(summary=summary)
 
 
