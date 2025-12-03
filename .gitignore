@@ -213,3 +213,4 @@ mlflow/
 
 # Qdrant
 qdrant_data/
+uv.lock
