@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -8,7 +6,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
 
 from src.logger import logger
-from src.prompts import SUMMARIZATION_PROMPT
+from src.rag.prompts import SUMMARIZATION_PROMPT
 from src.settings import app_settings
 
 # Ограничиваем длину текста для суммаризации, чтобы не переполнить контекст LLM
@@ -17,20 +15,14 @@ MAX_SUMMARIZATION_CHARS = 12_000
 MAX_SUMMARY_CHUNKS = 50
 # Размер страницы при скролле коллекции
 SCROLL_PAGE_SIZE = 64
-
-
-def _prepare_summary_llm() -> ChatOpenAI:
-    """Создание LLM для суммаризации источников."""
-    return ChatOpenAI(
-        model=app_settings.llm.model,
-        temperature=0.3,
-        max_tokens=min(app_settings.llm.max_tokens, 512),
-        base_url=app_settings.llm.base_url,
-        api_key=app_settings.llm.api_key.get_secret_value(),
-    )
-
-
-summary_llm = _prepare_summary_llm()
+# LLM для суммаризации источников
+summary_llm = ChatOpenAI(
+    model=app_settings.llm.model,
+    temperature=0.3,
+    max_tokens=min(app_settings.llm.max_tokens, 512),
+    base_url=app_settings.llm.base_url,
+    api_key=app_settings.llm.api_key.get_secret_value(),
+)
 
 
 def _fetch_chunks(
@@ -87,7 +79,7 @@ def _fetch_chunks(
             if not content:
                 continue
 
-            collected.append((int(chunk_id) if chunk_id is not None else 0, content))
+            collected.append((int(chunk_id or 0), content))
             if len(collected) >= MAX_SUMMARY_CHUNKS:
                 break
 
@@ -114,10 +106,6 @@ async def summarize_document(
     Returns:
         str: Суммаризация статьи или сообщение об ошибке
     """
-    if qdrant_client is None:
-        logger.error("Qdrant клиент не инициализирован для суммаризации")
-        return "Хранилище источников недоступно: Qdrant клиент не инициализирован."
-
     chunks = _fetch_chunks(qdrant_client, document_id, chunk_ids)
     if not chunks:
         return f"Не удалось найти текст для источника {document_id}."
@@ -126,9 +114,7 @@ async def summarize_document(
     if len(joined_text) > MAX_SUMMARIZATION_CHARS:
         logger.info(
             "Обрезаем текст для суммаризации документа %s: %d символов -> %d",
-            document_id,
-            len(joined_text),
-            MAX_SUMMARIZATION_CHARS,
+            document_id, len(joined_text), MAX_SUMMARIZATION_CHARS
         )
         joined_text = joined_text[:MAX_SUMMARIZATION_CHARS]
 

@@ -1,162 +1,13 @@
-from contextlib import asynccontextmanager
-import gc
-import re
-
-import mlflow
-import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from qdrant_client import QdrantClient
-
-from src.rag.schemas import Document
-from src.schemas import AppState, RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
+from src.schemas import RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
-from src.caching import get_cached_answer, set_cached_answer, get_cache_count, get_cache_count
-from src.chunking import chunk_documents
-from src.data_loader import load_documents
+from src.caching import get_cached_answer, set_cached_answer, get_cache_count
 from src.logger import logger
-from src.rag.graph import RAGGraph
-from src.schemas import (
-    AppState,
-    RAGRequest,
-    RAGResponse,
-    SourceInfo,
-    SummarizationRequest,
-    SummarizationResponse,
-)
-from src.settings import app_settings
-from src.summarization import summarize_document
+from src.lifespan import lifespan, app_state
 from src.build_sources import build_sources
-from src.retrievers import (
-    collection_exists_and_not_empty,
-    create_ensemble_retriever,
-    create_qdrant_only_retriever,
-    create_reranked_retriever,
-)
-
-app_state = AppState()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Инициализация приложения при старте и освобождение ресурсов при завершении.
-    
-    Args:
-        app (FastAPI): Инстанс FastAPI приложения
-    """
-    logger.info("Инициализация приложения RAG...")
-    
-    # Инициализация MLflow
-    if app_settings.mlflow.enabled:
-        logger.info("Подключение к MLflow...")
-        mlflow.set_tracking_uri(app_settings.mlflow.tracking_uri)
-        mlflow.set_experiment(app_settings.mlflow.experiment_name)
-        mlflow.langchain.autolog()
-        logger.info(f"MLflow настроен: {app_settings.mlflow.tracking_uri}")
-    
-    # Инициализация Qdrant
-    logger.info("Инициализация Qdrant клиента...")
-    qdrant_settings = app_settings.qdrant
-    qdrant_kwargs = {"prefer_grpc": qdrant_settings.prefer_grpc}
-    if qdrant_settings.url:
-        qdrant_kwargs["url"] = qdrant_settings.url
-        api_key = qdrant_settings.api_key
-        if api_key and api_key.get_secret_value():
-            qdrant_kwargs["api_key"] = api_key.get_secret_value()
-    else:
-        qdrant_kwargs["path"] = qdrant_settings.path
-    app_state.qdrant_client = QdrantClient(**qdrant_kwargs)
-    logger.info("Qdrant клиент готов")
-
-    # Проверяем существование коллекции
-    collection_name = app_settings.qdrant.collection_name
-    collection_ready = collection_exists_and_not_empty(
-        app_state.qdrant_client, collection_name
-    )
-
-    if collection_ready:
-        logger.info(
-            f"Коллекция '{collection_name}' уже существует и содержит данные. "
-            "Пропускаем загрузку документов и используем существующую "
-            "коллекцию."
-        )
-        logger.info(
-            "Создание ретривера на основе существующей коллекции..."
-        )
-        app_state.retriever = create_qdrant_only_retriever(
-            app_state.qdrant_client
-        )
-    else:
-        logger.info(
-            f"Коллекция '{collection_name}' не существует или пуста. "
-            "Загружаем и индексируем документы..."
-        )
-        # Загрузка данных
-        logger.info("Загрузка документов...")
-        documents = load_documents()
-
-        logger.info("Чанкирование документов...")
-        chunked_docs = chunk_documents(documents)
-
-        logger.info("Создание ретривера...")
-        ensemble_retriever = create_ensemble_retriever(
-            chunked_docs, app_state.qdrant_client
-        )
-        app_state.retriever = create_reranked_retriever(ensemble_retriever)
-
-    logger.info("Ретривер создан и готов к использованию")
-    
-    # Инициализация RAG графа
-    logger.info("Инициализация RAG графа...")
-    rag_graph = RAGGraph(retriever=app_state.retriever)
-    app_state.rag_graph = rag_graph
-    logger.info("RAG граф инициализирован")
-    
-    logger.info("Приложение инициализировано успешно")
-    
-    yield
-    
-    logger.info("Завершение работы приложения...")
-    
-    # Очистка ресурсов
-    logger.info("Освобождение ресурсов...")
-    
-    # Удаляем ссылки на большие объекты
-    qdrant_client = app_state.qdrant_client
-    app_state.rag_graph = None
-    app_state.retriever = None
-    app_state.qdrant_client = None
-    
-    # Очищаем сборщик мусора
-    gc.collect()
-    
-    # Очищаем GPU память если есть
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        logger.info("GPU память очищена")
-    
-    # Закрываем MLflow если он включен
-    if app_settings.mlflow.enabled:
-        mlflow.end_run()
-        logger.info("MLflow сессия закрыта")
-    if qdrant_client:
-        qdrant_client.close()
-        logger.info("Qdrant клиент закрыт")
-    
-    logger.info("Приложение завершено")
-
-def parse_sources(text: str) -> dict[int, str]:
-    # заглушка для парсинга источников из текста ответа
-    # [1] ... - http://...
-    pattern = r"\[(\d+)\].*?-\s*(https?://[^\s\"']+)"
-    
-    matches = re.findall(pattern, text)
-    
-    # return {int(num): url for num, url in matches}
-    return {1:"https://habr.com/ru/companies/ru_mts/articles/965622/",
-            2: "https://habr.com/ru/companies/avito/articles/966018/"}
+from src.rag.schemas import Document
+from src.summarization import summarize_document
 
 app = FastAPI(
     title="RAG API",
@@ -177,29 +28,23 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
     query = request.query.strip()
-
     logger.info(f"Новый запрос: {query}")
     
     cached_entry = await get_cached_answer(query)
     if cached_entry:
         logger.info("Ответ найден в кэше")
-        
-        documents = [Document(**doc) for doc in cached_entry.get("documents", [])]
-        cached_sources = build_sources(documents)
-
-        print (cached_sources)
-        cached_answer = cached_entry.get("answer", "")
-
-        return RAGResponse(answer=cached_answer, from_cache=True, sources=cached_sources)
+        documents = [Document(**doc) for doc in cached_entry["documents"]]
+        return RAGResponse(
+            answer=cached_entry["answer"],
+            from_cache=True,
+            sources=build_sources(documents)
+        )
     
     logger.info("Ответ не в кэше, генерируем новый ответ")
     try:
         rag_state = await app_state.rag_graph.run(query)
-
         sources = build_sources(rag_state.documents)
-
         await set_cached_answer(query, rag_state)
-
         return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
 
     except Exception as e:

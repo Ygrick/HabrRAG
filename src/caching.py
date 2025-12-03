@@ -22,48 +22,6 @@ async def get_db_connection() -> asyncpg.Connection:
     )
 
 
-async def load_answer_cache() -> dict:
-    """
-    Загружает весь кэш ответов из базы данных.
-    
-    Returns:
-        dict: Словарь кэша, где ключ — запрос, значение — ответ
-    """
-    conn = await get_db_connection()
-    try:
-        rows = await conn.fetch(f"SELECT query, response FROM {app_settings.database.cache_table}")
-        cache = {row['query']: json.loads(row['response']) for row in rows}
-        return cache
-    except json.JSONDecodeError as e:
-        logger.error(f"Ошибка декодирования JSON в кэше: {e}")
-        return {}
-    except Exception as e:
-        logger.error(f"Ошибка загрузки кэша ответов: {e}")
-        return {}
-    finally:
-        await conn.close()
-
-
-async def save_answer_cache(cache: dict) -> None:
-    """
-    Сохраняет весь кэш ответов в базу данных.
-    
-    Args:
-        cache (dict): Словарь кэша
-    """
-    conn = await get_db_connection()
-    try:
-        await conn.execute(f"DELETE FROM {app_settings.database.cache_table}")
-        if cache:
-            values = [(query, json.dumps(response)) for query, response in cache.items()]
-            await conn.executemany(f"INSERT INTO {app_settings.database.cache_table} (query, response) VALUES ($1, $2)", values)
-        logger.info("Кэш ответов сохранен в базу данных.")
-    except Exception as e:
-        logger.error(f"Ошибка сохранения кэша ответов: {e}")
-    finally:
-        await conn.close()
-
-
 async def get_cached_answer(query: str) -> dict | None:
     """
     Получает кэшированный ответ для запроса из базы данных.
@@ -77,17 +35,8 @@ async def get_cached_answer(query: str) -> dict | None:
     conn = await get_db_connection()
     try:
         row = await conn.fetchrow(f"SELECT response FROM {app_settings.database.cache_table} WHERE query = $1", query)
-        print (row)
-        print (type(row))
         if row:
             response_data = json.loads(row['response'])
-            print (response_data)
-            print (type(response_data))
-            print ({
-                "documents": response_data.get("documents", []),
-                "doc_ids": response_data.get("doc_ids", ""),
-                "answer": response_data.get("answer", "")
-            })
             return {
                 "documents": response_data.get("documents", []),
                 "doc_ids": response_data.get("doc_ids", ""),
@@ -109,7 +58,7 @@ async def set_cached_answer(init_query: str, rag_state: RAGState) -> None:
     Сохраняет RAGState в кэш в базе данных.
     
     Args:
-        query (str): Запрос
+        init_query (str): Запрос
         rag_state (RAGState): Состояние RAG
     """
     conn = await get_db_connection()
@@ -137,7 +86,7 @@ async def get_cache_count() -> int:
     conn = await get_db_connection()
     try:
         row = await conn.fetchrow(f"SELECT COUNT(*) as count FROM {app_settings.database.cache_table}")
-        return row['count'] if row else 0
+        return row['count']
     except Exception as e:
         logger.error(f"Ошибка получения количества записей в кэше: {e}")
         return 0

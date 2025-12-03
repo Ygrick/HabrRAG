@@ -81,8 +81,8 @@ class ChainlitDatabaseSettings(BaseModel):
     fastapi_service_url: str = "http://app:8000"
 
 class AppSettings(BaseSettings):
-    dataset: str = "neural-bridge/rag-dataset-1200"
-    split_dataset: str = "train"
+    dataset: str = "IlyaGusev/habr"
+    split_dataset: str = "train[:1000]"
     dataset_column: str = "text_markdown"
     llm: LLMSettings = Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
