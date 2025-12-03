@@ -24,7 +24,7 @@ def chunk_documents(chunk_size: int = 1000, chunk_overlap: int = 100) -> list[Do
     Returns:
         list[Document]: Разбитые на чанки документы с метаданными
     """
-    documents = load_dataset(app_settings.dataset, split=app_settings.split_dataset)
+    documents = load_dataset(app_settings.dataset, split=app_settings.split_dataset, trust_remote_code=True)
     logger.info(f"Разбиваем {len(documents)} документов на чанки (размер: {chunk_size}, перекрытие: {chunk_overlap})")
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
