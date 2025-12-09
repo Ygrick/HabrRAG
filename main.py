@@ -1,4 +1,5 @@
 import uvicorn
+import mlflow
 from fastapi import FastAPI, HTTPException
 from src.schemas import RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse
 from src.settings import app_settings
@@ -7,6 +8,7 @@ from src.logger import logger
 from src.lifespan import lifespan, app_state
 from src.build_sources import build_sources
 from src.rag.schemas import Document
+from contextlib import nullcontext
 from src.summarization import summarize_document
 
 app = FastAPI(
@@ -28,10 +30,11 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
         RAGResponse: Ответ и информация о его источнике (кэш или генерация)
     """
     query = request.query.strip()
-    logger.info(f"Новый запрос: {query}")
+    logger.info(f"Новый запрос: {query}, run_id: {request.run_id}")
     
     cached_entry = await get_cached_answer(query)
-    if cached_entry:
+    # if cached_entry:
+    if False:
         logger.info("Ответ найден в кэше")
         documents = [Document(**doc) for doc in cached_entry["documents"]]
         return RAGResponse(
@@ -39,16 +42,21 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
             from_cache=True,
             sources=build_sources(documents)
         )
-    
     logger.info("Ответ не в кэше, генерируем новый ответ")
+
+    # Используем контекстный менеджер mlflow если передан run_id
+    use_mlflow = request.run_id and app_settings.mlflow.enabled
+    ctx = mlflow.start_run(run_id=request.run_id) if use_mlflow else nullcontext()
+
     try:
-        rag_state = await app_state.rag_graph.run(query)
-        sources = build_sources(rag_state.documents)
-        await set_cached_answer(query, rag_state)
-        return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
+        with ctx:
+            rag_state = await app_state.rag_graph.run(query)
+            sources = build_sources(rag_state.documents)
+            await set_cached_answer(query, rag_state)
+            return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
 
     except Exception as e:
-        logger.error(f"Ошибка при обработке запроса: {e}")
+        logger.error(f"Ошибка при обработке запроса (run_id={request.run_id}): {e}")
         return RAGResponse(
             answer="Ошибка при обработке запроса", from_cache=False, sources=[]
         )

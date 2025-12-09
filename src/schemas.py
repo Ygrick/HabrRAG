@@ -21,6 +21,7 @@ class AppState(BaseModel):
 class RAGRequest(BaseModel):
     """Модель запроса для получения ответа от RAG"""
     query: str
+    run_id: Optional[str] = None
 
 
 class SourceInfo(BaseModel):
