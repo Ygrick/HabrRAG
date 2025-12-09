@@ -16,7 +16,7 @@ services:
       - habrrag_network
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.14.1
+    image: ghcr.io/mlflow/mlflow:v3.7.0
     container_name: habrrag_mlflow
     ports:
       - "5001:5001"
@@ -25,7 +25,7 @@ services:
     environment:
       - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
       - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+    command: mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --allowed-hosts "*"
     networks:
       - habrrag_network
 
@@ -82,6 +82,7 @@ services:
     depends_on:
       - qdrant
       - mlflow
+      - db
     networks:
       - habrrag_network
     healthcheck:
