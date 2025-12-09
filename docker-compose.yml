@@ -22,10 +22,19 @@ services:
       - "5001:5001"
     volumes:
       - mlflow_data:/mlflow
+      - ./mlartifacts:/mlartifacts
     environment:
       - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts --allowed-hosts "*"
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlartifacts
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5001
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root mlflow-artifacts:/
+      --serve-artifacts
+      --artifacts-destination /mlartifacts
+      --allowed-hosts "*"
     networks:
       - habrrag_network
 
