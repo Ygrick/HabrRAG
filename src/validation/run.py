@@ -111,7 +111,7 @@ if __name__ == "__main__":
         "--dataset",
         "-d",
         type=str,
-        default="qa_dataset.jsonl",
+        default="src/validation/qa_dataset.jsonl",
         help="Путь к файлу с датасетом (JSONL формат)",
     )
     parser.add_argument(
