@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -68,6 +66,25 @@ services:
     networks:
       - habrrag_network
 
+  langfuse:
+    container_name: langfuse-server2
+    image: ghcr.io/langfuse/langfuse:2
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://chainlit_user:chainlit_pass@db:5432/postgres
+      - NEXTAUTH_SECRET=mysecret
+      - SALT=mysalt
+      - NEXTAUTH_URL=http://localhost:3000
+      - TELEMETRY_ENABLED=${TELEMETRY_ENABLED:-true}
+      - NEXT_PUBLIC_SIGN_UP_DISABLED=${NEXT_PUBLIC_SIGN_UP_DISABLED:-false}
+      - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=${LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES:-false}
+    restart: always
+    networks:
+      - habrrag_network
+
   app:
     build:
       context: .
@@ -92,6 +109,7 @@ services:
       - qdrant
       - mlflow
       - db
+      - langfuse
     networks:
       - habrrag_network
     healthcheck:
