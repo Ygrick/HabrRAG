@@ -1,6 +1,6 @@
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from src.utils import create_llm, get_callbacks
 from langgraph.graph import END, START, StateGraph
 
 from src.settings import app_settings
@@ -9,21 +9,14 @@ from src.rag.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT, PARA
 from src.rag.schemas import Document
 from src.rag.state import RAGState
 
-
 class RAGGraph:
-    def __init__(self, retriever: ContextualCompressionRetriever):
+    def __init__(self, retriever: ContextualCompressionRetriever, callback_config: dict = None):
         self.retriever = retriever
-        self._llm_kwargs = {
-            "model": app_settings.llm.model,
-            "temperature": app_settings.llm.temperature,
-            "max_tokens": app_settings.llm.max_tokens,
-            "base_url": app_settings.llm.base_url,
-            "api_key": app_settings.llm.api_key.get_secret_value(),
-        }
-        self.filter_docs_llm = ChatOpenAI(**self._llm_kwargs)
-        self.paraphrase_llm = ChatOpenAI(**self._llm_kwargs)
-        self.generate_answer_llm = ChatOpenAI(**self._llm_kwargs)
+        self.filter_docs_llm = create_llm(app_settings.llm)
+        self.paraphrase_llm = create_llm(app_settings.llm)
+        self.generate_answer_llm = create_llm(app_settings.llm)
         self.graph = self._build_graph()
+        self.callbacks = get_callbacks(callback_config or app_settings.callback.model_dump(mode='json'))
 
     def _build_graph(self):
         """Строит граф RAG пайплайна"""
@@ -105,12 +98,12 @@ class RAGGraph:
         logger.info("Ответ сгенерирован успешно")
         return state
 
-    async def run(self, query: str) -> RAGState:
+    async def run(self, query: str, callbacks=None) -> RAGState:
         """Запускает RAG пайплайн и возвращает итоговое состояние."""
         logger.info(f"Запуск RAG пайплайна: {query}")
         
         try:
-            result = await self.graph.ainvoke(RAGState(query=query))
+            result = await self.graph.ainvoke(RAGState(query=query), config={"callbacks": callbacks or self.callbacks})
             result_state = RAGState(**result)
             logger.info(f"Результат: {result_state.answer}")
             return result_state
