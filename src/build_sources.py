@@ -14,13 +14,14 @@ def build_sources(documents: list[Document]) -> list[SourceInfo]:
     grouped: dict[int, SourceInfo] = {}
 
     for doc in documents:
-        if doc.document_id == -1:
+        doc_id = int(doc.id)
+        if doc_id == -1:
             continue
 
         source = grouped.setdefault(
-            doc.document_id,
+            doc_id,
             SourceInfo(
-                document_id=doc.document_id,
+                document_id=doc_id,
                 chunk_ids=[],
                 url=doc.url,
                 preview=None,
