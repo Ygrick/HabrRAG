@@ -22,16 +22,6 @@ class RetrievalSettings(BaseModel):
     ensemble_weights_faiss: float = 0.6
 
 
-class MLflowSettings(BaseModel):
-    tracking_uri: str = "http://127.0.0.1:5001"
-    experiment_name: str = "LangChain. RAG-Агент: Поиск и Генерация Ответов"
-    enabled: bool = True
-    backend_store_uri: str = "sqlite:///./mlflow/mlflow.db"
-    artifact_root: str = "./mlflow/artifacts"
-    auto_start: bool = True
-    startup_timeout_seconds: int = 30
-
-
 class QdrantSettings(BaseModel):
     """
     Настройки подключения к Qdrant.
@@ -117,7 +107,6 @@ class AppSettings(BaseSettings):
     dataset_column: str = "text_markdown"
     llm: LLMSettings = Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
-    mlflow: MLflowSettings = Field(default_factory=MLflowSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     logger: LoggerSettings = Field(default_factory=LoggerSettings)
     fastapi: FastAPISettings = Field(default_factory=FastAPISettings)

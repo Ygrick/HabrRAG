@@ -13,29 +13,6 @@ services:
     networks:
       - habrrag_network
 
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.7.0
-    container_name: habrrag_mlflow
-    ports:
-      - "5001:5001"
-    volumes:
-      - mlflow_data:/mlflow
-      - ./mlartifacts:/mlartifacts
-    environment:
-      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlartifacts
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5001
-      --backend-store-uri sqlite:///mlflow/mlflow.db
-      --default-artifact-root mlflow-artifacts:/
-      --serve-artifacts
-      --artifacts-destination /mlartifacts
-      --allowed-hosts "*"
-    networks:
-      - habrrag_network
-
   db:
     image: postgres:15
     restart: unless-stopped
@@ -94,8 +71,6 @@ services:
       - "8000:8000"
     volumes:
       - cache_data:/app/cache
-      - mlruns_data:/app/mlruns
-      - mlartifacts_data:/app/mlartifacts
     env_file:
       - .env
     deploy:
@@ -107,7 +82,6 @@ services:
               capabilities: [gpu]
     depends_on:
       - qdrant
-      - mlflow
       - db
       - langfuse
     networks:
@@ -128,8 +102,6 @@ services:
       - "8001:8001"
     volumes:
       - cache_data:/app/cache
-      - mlruns_data:/app/mlruns
-      - mlartifacts_data:/app/mlartifacts
     env_file:
       - .env
     command: chainlit run chainlit_app.py --host 0.0.0.0 --port 8001
@@ -138,8 +110,6 @@ services:
           condition: service_healthy
         qdrant:
           condition: service_started
-        mlflow:
-          condition: service_started
         db:
           condition: service_started
     networks:
@@ -147,14 +117,10 @@ services:
 
 volumes:
   qdrant_data:
-  mlflow_data:
   cache_data:
-  mlruns_data:
-  mlartifacts_data:
   db-data:
   pgadmin-data:
 
 networks:
   habrrag_network:
     driver: bridge
-

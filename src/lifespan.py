@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 import gc
 
-import mlflow
 import torch
 from fastapi import FastAPI
 from qdrant_client import QdrantClient
@@ -27,14 +26,6 @@ async def lifespan(app: FastAPI):
         app (FastAPI): Инстанс FastAPI приложения
     """
     logger.info("Инициализация приложения RAG...")
-    
-    # Инициализация MLflow
-    if app_settings.mlflow.enabled:
-        logger.info("Подключение к MLflow...")
-        mlflow.set_tracking_uri(app_settings.mlflow.tracking_uri)
-        mlflow.set_experiment(app_settings.mlflow.experiment_name)
-        mlflow.langchain.autolog()
-        logger.info(f"MLflow настроен: {app_settings.mlflow.tracking_uri}")
     
     # Инициализация Qdrant
     logger.info("Инициализация Qdrant клиента...")
@@ -99,10 +90,6 @@ async def lifespan(app: FastAPI):
         torch.cuda.reset_peak_memory_stats()
         logger.info("GPU память очищена")
     
-    # Закрываем MLflow если он включен
-    if app_settings.mlflow.enabled:
-        mlflow.end_run()
-        logger.info("MLflow сессия закрыта")
     if qdrant_client:
         qdrant_client.close()
         logger.info("Qdrant клиент закрыт")

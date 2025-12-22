@@ -1,5 +1,4 @@
 import uvicorn
-import mlflow
 from fastapi import FastAPI, HTTPException
 from src.schemas import RAGRequest, RAGResponse, SummarizationRequest, SummarizationResponse, RunDatasetRequest
 from src.settings import app_settings
@@ -8,7 +7,6 @@ from src.logger import logger
 from src.lifespan import lifespan, app_state
 from src.build_sources import build_sources
 from src.rag.schemas import Document
-from contextlib import nullcontext
 from src.summarization import summarize_document
 from src.utils import build_langfuse_client, get_langfuse_config
 import httpx
@@ -85,16 +83,11 @@ async def get_rag_answer(request: RAGRequest) -> RAGResponse:
         )
     logger.info("Ответ не в кэше, генерируем новый ответ")
 
-    # Используем контекстный менеджер mlflow если передан run_id
-    use_mlflow = request.run_id and app_settings.mlflow.enabled
-    ctx = mlflow.start_run(run_id=request.run_id) if use_mlflow else nullcontext()
-
     try:
-        with ctx:
-            rag_state = await app_state.rag_graph.run(query)
-            sources = build_sources(rag_state.documents)
-            await set_cached_answer(query, rag_state)
-            return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
+        rag_state = await app_state.rag_graph.run(query)
+        sources = build_sources(rag_state.documents)
+        await set_cached_answer(query, rag_state)
+        return RAGResponse(answer=rag_state.answer, from_cache=False, sources=sources)
 
     except Exception as e:
         logger.error(f"Ошибка при обработке запроса (run_id={request.run_id}): {e}")

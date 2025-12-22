@@ -12,7 +12,6 @@ class AppState(BaseModel):
     retriever: Optional[ContextualCompressionRetriever] = None
     rag_graph: Optional[RAGGraph] = None
     qdrant_client: Optional[QdrantClient] = None
-    mlflow_process: Optional[Any] = None
     
     class Config:
         arbitrary_types_allowed = True
