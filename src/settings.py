@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List
 
 
 class LLMSettings(BaseModel):
@@ -80,6 +81,36 @@ class ChainlitDatabaseSettings(BaseModel):
     database: str = "chainlit_db"
     fastapi_service_url: str = "http://app:8000"
 
+class LangfuseSettings(BaseModel):
+    debug: bool = False
+    host: str = "http://langfuse:3000"
+    host_local: str = "http://localhost:3000"
+    public_key: str = "lf_public_test_key"
+    secret_key: SecretStr = SecretStr("lf_secret_test_key")
+    tags: List[str] = ["test"]
+    trace_name: str = "rag_qa_test"
+
+class CallbackSettings(BaseModel):
+    langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)
+
+class RagChainSettings(BaseModel):
+    api_url: str = "http://localhost:8000"
+
+class EvaluationSettings(BaseSettings):
+    hf_model: str = "intfloat/multilingual-e5-small"
+    default_output_dir: str = "evaluation/logs"
+    default_output_pattern: str = "evaluation_report_{dataset_name}_{run_name}.json"
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        env_prefix="RAG_APP__",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
+
+
 class AppSettings(BaseSettings):
     dataset: str = "IlyaGusev/habr"
     split_dataset: str = "train[:1000]"
@@ -92,6 +123,9 @@ class AppSettings(BaseSettings):
     fastapi: FastAPISettings = Field(default_factory=FastAPISettings)
     chainlit: ChainlitDatabaseSettings = Field(default_factory=ChainlitDatabaseSettings)
     database: CacheDatabaseSettings = Field(default_factory=CacheDatabaseSettings)
+    callback: CallbackSettings = Field(default_factory=CallbackSettings)
+    rag_chain: RagChainSettings = Field(default_factory=RagChainSettings)
+    evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env", 

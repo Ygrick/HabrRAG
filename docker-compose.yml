@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -16,16 +14,25 @@ services:
       - habrrag_network
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.14.1
+    image: ghcr.io/mlflow/mlflow:v3.7.0
     container_name: habrrag_mlflow
     ports:
       - "5001:5001"
     volumes:
       - mlflow_data:/mlflow
+      - ./mlartifacts:/mlartifacts
     environment:
       - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
-      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
-    command: mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlartifacts
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5001
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root mlflow-artifacts:/
+      --serve-artifacts
+      --artifacts-destination /mlartifacts
+      --allowed-hosts "*"
     networks:
       - habrrag_network
 
@@ -59,6 +66,25 @@ services:
     networks:
       - habrrag_network
 
+  langfuse:
+    container_name: langfuse-server2
+    image: ghcr.io/langfuse/langfuse:2
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://chainlit_user:chainlit_pass@db:5432/postgres
+      - NEXTAUTH_SECRET=mysecret
+      - SALT=mysalt
+      - NEXTAUTH_URL=http://localhost:3000
+      - TELEMETRY_ENABLED=${TELEMETRY_ENABLED:-true}
+      - NEXT_PUBLIC_SIGN_UP_DISABLED=${NEXT_PUBLIC_SIGN_UP_DISABLED:-false}
+      - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=${LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES:-false}
+    restart: always
+    networks:
+      - habrrag_network
+
   app:
     build:
       context: .
@@ -82,6 +108,8 @@ services:
     depends_on:
       - qdrant
       - mlflow
+      - db
+      - langfuse
     networks:
       - habrrag_network
     healthcheck:

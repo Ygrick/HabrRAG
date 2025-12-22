@@ -1,13 +1,13 @@
 from typing import List, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
 
 from src.logger import logger
 from src.rag.prompts import SUMMARIZATION_PROMPT
 from src.settings import app_settings
+from src.utils import create_llm
 
 # Ограничиваем длину текста для суммаризации, чтобы не переполнить контекст LLM
 MAX_SUMMARIZATION_CHARS = 12_000
@@ -16,13 +16,7 @@ MAX_SUMMARY_CHUNKS = 50
 # Размер страницы при скролле коллекции
 SCROLL_PAGE_SIZE = 64
 # LLM для суммаризации источников
-summary_llm = ChatOpenAI(
-    model=app_settings.llm.model,
-    temperature=0.3,
-    max_tokens=min(app_settings.llm.max_tokens, 512),
-    base_url=app_settings.llm.base_url,
-    api_key=app_settings.llm.api_key.get_secret_value(),
-)
+summary_llm = create_llm(app_settings.llm, temperature=0.3, max_tokens=min(app_settings.llm.max_tokens, 512))
 
 
 def _fetch_chunks(
@@ -36,12 +30,12 @@ def _fetch_chunks(
     """
     filter_conditions = [
         qdrant_models.FieldCondition(
-            key="metadata.document_id",
+            key="metadata.id",
             match=qdrant_models.MatchValue(value=document_id),
         ),
         # fallback for payloads without nested metadata
         qdrant_models.FieldCondition(
-            key="document_id",
+            key="id",
             match=qdrant_models.MatchValue(value=document_id),
         ),
     ]

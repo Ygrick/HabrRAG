@@ -4,6 +4,9 @@ from src.schemas import SourceInfo
 
 def build_sources(documents: list[Document]) -> list[SourceInfo]:
     """Группирует чанки по document_id и готовит метаданные источников.
+    В qdrant ID документа лежит в поле "id", 
+    "document_id" = document_chunk_id
+    "chunk_id" = global_chunk_id
     
     Args:
         documents (list[Document]): Список документов для группировки
@@ -14,13 +17,14 @@ def build_sources(documents: list[Document]) -> list[SourceInfo]:
     grouped: dict[int, SourceInfo] = {}
 
     for doc in documents:
-        if doc.document_id == -1:
+        if doc.id == -1:
             continue
 
         source = grouped.setdefault(
-            doc.document_id,
+            doc.id,
             SourceInfo(
-                document_id=doc.document_id,
+                document_id=doc.id,
+                title=doc.title,
                 chunk_ids=[],
                 url=doc.url,
                 preview=None,

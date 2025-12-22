@@ -21,11 +21,22 @@ class AppState(BaseModel):
 class RAGRequest(BaseModel):
     """Модель запроса для получения ответа от RAG"""
     query: str
+    run_id: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RunDatasetRequest(BaseModel):
+    """Модель запроса для запуска датасета"""
+    dataset_name: str
+    run_name: Optional[str] = None
+    run_description: str = "Langfuse dataset run for RAG chain"
+    limit: Optional[int] = None
 
 
 class SourceInfo(BaseModel):
     """Метаданные источников, использованных в ответе."""
     document_id: int
+    title: str = None
     chunk_ids: List[int]
     url: Optional[str] = None
     preview: Optional[str] = None

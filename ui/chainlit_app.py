@@ -64,15 +64,15 @@ async def on_message(message: cl.Message):
                 data = response.json()
 
                 answer = data["answer"]
-                buttons = [(source['document_id'], source['url']) for source in data["sources"]] 
+                buttons = [(source['document_id'], source['url'], source['title']) for source in data["sources"]] 
                 logger.info(buttons)
                 actions = [
                     cl.Action(
                         name="button",
-                        payload={"num_button": num_button+1, "document_id": document_id, 'url': url},
-                        label=str(num_button+1)
+                        payload={"num_button": num_button+1, "document_id": document_id, 'url': url, 'title': title},
+                        label=f"{num_button+1}. {title}"
                     )
-                    for num_button, (document_id, url) in enumerate(buttons)
+                    for num_button, (document_id, url, title) in enumerate(buttons)
                 ]
             else:
                 answer = f"Ошибка при получении ответа от сервера (статус: {response.status_code})"
