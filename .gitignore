@@ -213,6 +213,5 @@ mlflow/
 
 # Qdrant
 qdrant_data/
-uv.lock
 docker-compose.macos.yml
 Dockerfile.app.macos
