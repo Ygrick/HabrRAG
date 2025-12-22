@@ -66,7 +66,7 @@ HabrRAG/
 2. Запустить поднятие docker
 3. Подождать несколько минут инициализации приложения
 4. Загрузить подготовленный snapshot https://drive.google.com/file/d/1sHARsAjnrDR72dgbSYqxPviEC0Q0YIbj/view?usp=sharing в qdrant прямо через интерфейс
-5. Готово, вы великолепны
+5. Готово, вы великолепны  
 ⚠️⚠️⚠️
 
 ### 1. Получение API ключа
