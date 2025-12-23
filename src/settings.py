@@ -17,9 +17,9 @@ class RetrievalSettings(BaseModel):
     k: int = 2
     top_k: int = 3
     bm25_k: int = 2
-    faiss_k: int = 2
+    qdrant_k: int = 2
     ensemble_weights_bm25: float = 0.4
-    ensemble_weights_faiss: float = 0.6
+    ensemble_weights_qdrant: float = 0.6
 
 
 class QdrantSettings(BaseModel):

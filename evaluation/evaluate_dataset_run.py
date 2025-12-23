@@ -17,8 +17,7 @@ from evaluation.metrics import compute_basic_retriever_metrics, compute_basic_ge
 from src.utils import (
     build_langfuse_client,
     create_llm,
-    serialize_args,
-    create_llm)
+    serialize_args)
 
 
 def parse_args() -> argparse.Namespace:
@@ -187,13 +186,14 @@ def main() -> None:
 
     ragas_samples = [_build_ragas_sample(item) for item in items]
 
-    llm = create_llm(eval_config.llm, use_json_response=True)
+    # llm = create_llm(eval_config.llm, use_json_response=True)
 
     ragas_retriever_metrics = compute_ragas_retriever_metrics(ragas_samples)
-    ragas_generator_metrics = compute_ragas_generator_metrics(ragas_samples, hf_model=hf_model, llm=llm)
+    ragas_generator_metrics = compute_ragas_generator_metrics(ragas_samples, hf_model=hf_model, llm=None)
 
     report = {
         "summary": summary,
+        "params_rag": app_settings.retrieval.model_dump(),
         "retriever": basic_retriever_metrics | ragas_retriever_metrics,
         "generator": basic_generator_metrics | ragas_generator_metrics,
         "details": [item.as_dict() for item in items],

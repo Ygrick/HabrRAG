@@ -154,7 +154,7 @@ def create_ensemble_retriever(
     )
     qdrant_retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={'k': app_settings.retrieval.faiss_k}
+        search_kwargs={'k': app_settings.retrieval.qdrant_k}
     )
 
     logger.info("Создание BM25-ретривера...")
@@ -164,7 +164,7 @@ def create_ensemble_retriever(
     logger.info("Объединение ретриверов в EnsembleRetriever...")
     ensemble_retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, qdrant_retriever],
-        weights=[app_settings.retrieval.ensemble_weights_bm25, app_settings.retrieval.ensemble_weights_faiss]
+        weights=[app_settings.retrieval.ensemble_weights_bm25, app_settings.retrieval.ensemble_weights_qdrant]
     )
 
     logger.info("EnsembleRetriever успешно создан.")
@@ -185,10 +185,12 @@ def create_qdrant_only_retriever(
         ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности.
     """
     logger.info("Создание Qdrant ретривера (коллекция уже существует)...")
+    logger.info("Загрузка модели эмбеддингов...")
     query_embedding_model = HuggingFaceEmbeddings(
         model_name=app_settings.retrieval.embedding,
         model_kwargs={"device": "cpu"}
     )
+    logger.info("Модель эмбеддингов загружена.")
     vector_store = QdrantVectorStore(
         client=qdrant_client,
         collection_name=app_settings.qdrant.collection_name,
@@ -196,7 +198,7 @@ def create_qdrant_only_retriever(
     )
     qdrant_retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={'k': app_settings.retrieval.faiss_k}
+        search_kwargs={'k': app_settings.retrieval.qdrant_k}
     )
 
     logger.info("Создание ретривера с Cross-Encoder Reranking...")
