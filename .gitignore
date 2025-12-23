@@ -215,3 +215,9 @@ mlflow/
 qdrant_data/
 docker-compose.macos.yml
 Dockerfile.app.macos
+
+# Chainlit
+.chainlit/
+
+# Evaluation 
+evaluation/logs/
