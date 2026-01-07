@@ -130,18 +130,6 @@ def create_ensemble_retriever(
     Returns:
         EnsembleRetriever: Комбинированный ретривер для гибридного поиска.
     """
-    logger.info("Инициализация модели эмбеддингов для индексирования...")
-    indexing_embedding_model = HuggingFaceEmbeddings(
-        model_name=app_settings.retrieval.embedding,
-        model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
-    )
-
-    _prepare_qdrant_collection(qdrant_client, documents, indexing_embedding_model)
-
-    # Освобождаем GPU после индексации
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
     logger.info("Создание Qdrant ретривера...")
     query_embedding_model = HuggingFaceEmbeddings(
         model_name=app_settings.retrieval.embedding,
@@ -171,49 +159,43 @@ def create_ensemble_retriever(
     return ensemble_retriever
 
 
-def create_qdrant_only_retriever(
-    qdrant_client: QdrantClient,
-) -> ContextualCompressionRetriever:
-    """
-    Создаёт ретривер только на основе Qdrant (без BM25).
-    Используется когда коллекция уже существует и документы не нужно загружать.
 
+def load_documents_from_qdrant(qdrant_client: QdrantClient, collection_name: str):
+    """
+    Извлекает все документы (чанки) из коллекции QDrant без векторов.
+    
     Args:
-        qdrant_client (QdrantClient): Клиент Qdrant.
-
+        qdrant_client: Клиент QDrant.
+        collection_name: Имя коллекции.
+    
     Returns:
-        ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности.
+        list[Document]: Список документов с текстом и метаданными.
     """
-    logger.info("Создание Qdrant ретривера (коллекция уже существует)...")
-    logger.info("Загрузка модели эмбеддингов...")
-    query_embedding_model = HuggingFaceEmbeddings(
-        model_name=app_settings.retrieval.embedding,
-        model_kwargs={"device": "cpu"}
-    )
-    logger.info("Модель эмбеддингов загружена.")
-    vector_store = QdrantVectorStore(
-        client=qdrant_client,
-        collection_name=app_settings.qdrant.collection_name,
-        embedding=query_embedding_model,
-    )
-    qdrant_retriever = vector_store.as_retriever(
-        search_type="similarity",
-        search_kwargs={'k': app_settings.retrieval.qdrant_k}
-    )
-
-    logger.info("Создание ретривера с Cross-Encoder Reranking...")
-    top_n = app_settings.retrieval.top_k
-    cross_encoder = HuggingFaceCrossEncoder(
-        model_name=app_settings.retrieval.cross_encoder
-    )
-    reranker = CrossEncoderReranker(model=cross_encoder, top_n=top_n)
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=reranker,
-        base_retriever=qdrant_retriever
-    )
-
-    logger.info("Ретривер с Cross-Encoder Reranking успешно создан.")
-    return compression_retriever
+    documents = []
+    offset = None
+    while True:
+        response = qdrant_client.scroll(
+            collection_name=collection_name,
+            limit=1000,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False
+        )
+        points = response[0]
+        if not points:
+            break
+        for point in points:
+            payload = point.payload
+            if 'page_content' in payload and 'metadata' in payload:
+                doc = Document(
+                    page_content=payload['page_content'],
+                    metadata=payload['metadata']
+                )
+                documents.append(doc)
+        offset = response[1]
+        if offset is None:
+            break
+    return documents
 
 
 def create_reranked_retriever(
@@ -229,7 +211,43 @@ def create_reranked_retriever(
     Returns:
         ContextualCompressionRetriever: Ретривер с функцией переоценки релевантности документов
     """
-    documents = chunk_documents()
+    collection_name = app_settings.qdrant.collection_name
+
+    collection_ready = collection_exists_and_not_empty(
+        qdrant_client, collection_name
+    )
+
+    if collection_ready:
+        logger.info(
+            f"Коллекция '{collection_name}' уже существует и содержит данные. "
+            "Пропускаем загрузку документов и используем существующую "
+            "коллекцию. Создание ретривера на основе существующей коллекции..."
+        )
+
+        documents = load_documents_from_qdrant(qdrant_client, collection_name)
+
+        logger.info(f"Загружено {len(documents)} документов из коллекции Qdrant.")
+
+    else:
+        logger.info(
+            f"Коллекция '{collection_name}' не существует или пуста. "
+            "Загружаем и индексируем документы..."
+        )
+
+        documents = chunk_documents()
+        logger.info(f"Всего подготовлено {len(documents)} чанков документов для индексирования.")
+
+        logger.info("Инициализация модели эмбеддингов для индексирования...")
+        indexing_embedding_model = HuggingFaceEmbeddings(
+            model_name=app_settings.retrieval.embedding,
+            model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"}
+        )
+
+        _prepare_qdrant_collection(qdrant_client, documents, indexing_embedding_model)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     retriever = create_ensemble_retriever(documents, qdrant_client)
     top_n = top_n or app_settings.retrieval.top_k
     

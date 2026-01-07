@@ -77,8 +77,8 @@ class LangfuseSettings(BaseModel):
     host_local: str = "http://localhost:3000"
     public_key: str = "lf_public_test_key"
     secret_key: SecretStr = SecretStr("lf_secret_test_key")
-    tags: List[str] = ["test"]
-    trace_name: str = "rag_qa_test"
+    tags: List[str] = ["habrrag"]
+    trace_name: str = "rag_answer"
 
 class CallbackSettings(BaseModel):
     langfuse: LangfuseSettings = Field(default_factory=LangfuseSettings)

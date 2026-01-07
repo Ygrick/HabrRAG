@@ -1,6 +1,6 @@
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.utils import create_llm, get_callbacks
+from src.utils import create_llm, get_callbacks, get_langfuse_config
 from langgraph.graph import END, START, StateGraph
 
 from src.settings import app_settings
@@ -16,7 +16,7 @@ class RAGGraph:
         self.paraphrase_llm = create_llm(app_settings.llm)
         self.generate_answer_llm = create_llm(app_settings.llm)
         self.graph = self._build_graph()
-        self.callbacks = get_callbacks(callback_config or app_settings.callback.model_dump(mode='json'))
+        self.callbacks = get_callbacks(callback_config or app_settings.callback.langfuse.model_dump(mode='json') | get_langfuse_config(local=False))
 
     def _build_graph(self):
         """Строит граф RAG пайплайна"""

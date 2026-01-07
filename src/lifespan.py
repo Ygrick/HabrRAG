@@ -10,8 +10,6 @@ from src.settings import app_settings
 from src.logger import logger
 from src.rag.graph import RAGGraph
 from src.retrievers import (
-    collection_exists_and_not_empty,
-    create_qdrant_only_retriever,
     create_reranked_retriever,
 )
 
@@ -42,28 +40,9 @@ async def lifespan(app: FastAPI):
         }
     app_state.qdrant_client = QdrantClient(**qdrant_kwargs)
     logger.info("Qdrant клиент готов")
+    
+    app_state.retriever = create_reranked_retriever(app_state.qdrant_client)
 
-    # Проверяем существование коллекции
-    collection_name = app_settings.qdrant.collection_name
-    collection_ready = collection_exists_and_not_empty(
-        app_state.qdrant_client, collection_name
-    )
-
-    if collection_ready:
-        logger.info(
-            f"Коллекция '{collection_name}' уже существует и содержит данные. "
-            "Пропускаем загрузку документов и используем существующую "
-            "коллекцию. Создание ретривера на основе существующей коллекции..."
-        )
-        app_state.retriever = create_qdrant_only_retriever(
-            app_state.qdrant_client
-        )
-    else:
-        logger.info(
-            f"Коллекция '{collection_name}' не существует или пуста. "
-            "Загружаем и индексируем документы..."
-        )
-        app_state.retriever = create_reranked_retriever(app_state.qdrant_client)
     logger.info("Ретривер создан и готов к использованию")
     
     # Инициализация RAG графа

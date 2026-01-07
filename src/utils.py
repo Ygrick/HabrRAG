@@ -5,6 +5,7 @@ from uuid import uuid4
 from pathlib import Path
 from langfuse.callback import CallbackHandler
 from typing import Any, Dict
+from pydantic import SecretStr
 from langfuse import Langfuse
 from langchain_openai import ChatOpenAI
 from langchain_mistralai import ChatMistralAI
@@ -23,9 +24,12 @@ def load_config(path_str: str) -> Dict[str, Any]:
 def get_langfuse_config(local: bool = False) -> Dict[str, Any]:
     from src.settings import app_settings
     host = app_settings.callback.langfuse.host_local if local else app_settings.callback.langfuse.host
+    secret_key = app_settings.callback.langfuse.secret_key
+    if isinstance(secret_key, SecretStr):
+        secret_key = secret_key.get_secret_value()
     return {
         "public_key": os.environ.get("LANGFUSE_PUBLIC_KEY", app_settings.callback.langfuse.public_key),
-        "secret_key": os.environ.get("LANGFUSE_SECRET_KEY", app_settings.callback.langfuse.secret_key.get_secret_value()),
+        "secret_key": os.environ.get("LANGFUSE_SECRET_KEY", secret_key),
         "host": host,
         "debug": app_settings.callback.langfuse.debug,
     }
@@ -33,12 +37,17 @@ def get_langfuse_config(local: bool = False) -> Dict[str, Any]:
 
 def get_callbacks(callback_config: dict) -> list:
     handlers = []
+    secret_key = callback_config["secret_key"]
+    if isinstance(secret_key, SecretStr):
+        secret_key = secret_key.get_secret_value()
+
     langfuse_handler = CallbackHandler(
-        secret_key=callback_config["langfuse"]["secret_key"],
-        public_key=callback_config["langfuse"]["public_key"],
-        host=callback_config["langfuse"]["host"],
-        trace_name=callback_config["langfuse"]["trace_name"],
-        tags=[*callback_config["langfuse"]["tags"], f"uuid_{uuid4()}"],
+        secret_key=secret_key,
+        public_key=callback_config["public_key"],
+        host=callback_config["host"],
+        trace_name=callback_config["trace_name"],
+        tags=[*callback_config["tags"], f"uuid_{uuid4()}"],
+        debug=callback_config["debug"],
     )
     handlers.append(langfuse_handler)
     return handlers
