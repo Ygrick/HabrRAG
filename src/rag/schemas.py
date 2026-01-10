@@ -24,3 +24,17 @@ class Document(BaseModel):
             f"Content: {self.content}",
         ]
         return "\n\n".join(paths)
+
+
+class RelevantDocumentId(BaseModel):
+    """Модель ID релевантного документа"""
+    document_id: int = Field(description="ID чанка внутри документа")
+    chunk_id: int = Field(description="Глобальный ID чанка")
+
+
+class RelevantDocumentsResponse(BaseModel):
+    """Модель ответа с релевантными ID документов"""
+    relevant_documents: list[RelevantDocumentId] = Field(
+        default_factory=list,
+        description="Список релевантных документов с их идентификаторами"
+    )
