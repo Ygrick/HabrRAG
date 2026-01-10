@@ -107,9 +107,12 @@ class RAGGraph:
         # Сохраняем JSON строку для использования в промпте генерации ответа
         state.doc_ids = relevant_docs_response.model_dump_json(indent=2)
         
-        # Фильтруем документы по релевантным ID
-        state.documents = self._filter_documents_by_ids(state.documents, relevant_docs_response)
-        logger.info(f"Идентификация завершена, осталось {len(state.documents)} релевантных документов")
+        # Фильтруем документы по релевантным ID только если включен флаг
+        if app_settings.rag.filter_documents:
+            state.documents = self._filter_documents_by_ids(state.documents, relevant_docs_response)
+            logger.info(f"Идентификация завершена, осталось {len(state.documents)} релевантных документов")
+        else:
+            logger.info(f"Идентификация завершена, фильтрация отключена, осталось {len(state.documents)} документов")
         return state
 
     async def _generate_answer(self, state: RAGState) -> RAGState:

@@ -114,6 +114,7 @@ class AppSettings(BaseSettings):
     database: CacheDatabaseSettings = Field(default_factory=CacheDatabaseSettings)
     callback: CallbackSettings = Field(default_factory=CallbackSettings)
     rag_chain: RagChainSettings = Field(default_factory=RagChainSettings)
+    filter_documents: bool = Field(default=True, description="Включить ли фильтрацию документов")
     evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
 
     model_config = SettingsConfigDict(
