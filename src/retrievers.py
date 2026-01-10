@@ -1,4 +1,6 @@
 import torch
+from typing import Optional
+
 from langchain.retrievers import ContextualCompressionRetriever, EnsembleRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain.schema import Document
@@ -116,12 +118,27 @@ def _prepare_qdrant_collection(
     logger.info("Qdrant коллекция %s заполнена %d документами", collection_name, len(documents))
 
 
+class TopKEnsembleRetriever(EnsembleRetriever):
+    """EnsembleRetriever, который обрезает объединённый результат до фиксированного числа документов."""
+
+    top_k: Optional[int] = None
+
+    def weighted_reciprocal_rank(
+        self,
+        doc_lists: list[list[Document]],
+    ) -> list[Document]:
+        result = super().weighted_reciprocal_rank(doc_lists)
+        if self.top_k is None:
+            return result
+        return result[: self.top_k]
+
+
 def create_ensemble_retriever(
     documents: list[Document],
     qdrant_client: QdrantClient,
 ) -> EnsembleRetriever:
     """
-    Создаёт EnsembleRetriever на базе Qdrant + BM25.
+    Создаёт EnsembleRetriever на базе Qdrant и/или BM25.
 
     Args:
         documents (list[Document]): Список документов для индексирования.
@@ -130,32 +147,51 @@ def create_ensemble_retriever(
     Returns:
         EnsembleRetriever: Комбинированный ретривер для гибридного поиска.
     """
-    logger.info("Создание Qdrant ретривера...")
-    query_embedding_model = HuggingFaceEmbeddings(
-        model_name=app_settings.retrieval.embedding,
-        model_kwargs={"device": "cpu"}
-    )
-    vector_store = QdrantVectorStore(
-        client=qdrant_client,
-        collection_name=app_settings.qdrant.collection_name,
-        embedding=query_embedding_model,
-    )
-    qdrant_retriever = vector_store.as_retriever(
-        search_type="similarity",
-        search_kwargs={'k': app_settings.retrieval.qdrant_k}
-    )
+    retrievers = []
+    weights = []
 
-    logger.info("Создание BM25-ретривера...")
-    bm25_retriever = BM25Retriever.from_documents(documents)
-    bm25_retriever.k = app_settings.retrieval.bm25_k
+    if app_settings.use_qdrant_retriever:
+        logger.info("Создание Qdrant ретривера...")
+        query_embedding_model = HuggingFaceEmbeddings(
+            model_name=app_settings.retrieval.embedding,
+            model_kwargs={"device": "cpu"}
+        )
+        vector_store = QdrantVectorStore(
+            client=qdrant_client,
+            collection_name=app_settings.qdrant.collection_name,
+            embedding=query_embedding_model,
+        )
+        qdrant_retriever = vector_store.as_retriever(
+            search_type="similarity",
+            search_kwargs={'k': app_settings.retrieval.qdrant_k}
+        )
+        retrievers.append(qdrant_retriever)
+        weights.append(app_settings.retrieval.ensemble_weights_qdrant)
 
-    logger.info("Объединение ретриверов в EnsembleRetriever...")
-    ensemble_retriever = EnsembleRetriever(
-        retrievers=[bm25_retriever, qdrant_retriever],
-        weights=[app_settings.retrieval.ensemble_weights_bm25, app_settings.retrieval.ensemble_weights_qdrant]
+    if app_settings.use_bm25_retriever:
+        logger.info("Создание BM25-ретривера...")
+        bm25_retriever = BM25Retriever.from_documents(documents)
+        bm25_retriever.k = app_settings.retrieval.bm25_k
+        retrievers.append(bm25_retriever)
+        weights.append(app_settings.retrieval.ensemble_weights_bm25)
+
+    if len(retrievers) == 0:
+        raise ValueError("Не выбран ни один ретривер. Включите хотя бы один из use_qdrant_retriever или use_bm25_retriever.")
+
+    logger.info("Создание EnsembleRetriever...")
+
+    # Если используется Cross-Reranker, не обрезаем на этом этапе
+    if app_settings.use_cross_reranker:
+        top_k = None
+    else: 
+        top_k = app_settings.retrieval.top_k
+
+    ensemble_retriever = TopKEnsembleRetriever(
+        retrievers=retrievers,
+        weights=weights,
+        top_k=top_k,
     )
-
-    logger.info("EnsembleRetriever успешно создан.")
+    logger.info("TopKEnsembleRetriever успешно создан.")
     return ensemble_retriever
 
 
@@ -249,19 +285,24 @@ def create_reranked_retriever(
             torch.cuda.empty_cache()
 
     retriever = create_ensemble_retriever(documents, qdrant_client)
-    top_n = top_n or app_settings.retrieval.top_k
     
-    logger.info("Инициализация модели кросс-энкодера для reranking...")
-    cross_encoder = HuggingFaceCrossEncoder(model_name=app_settings.retrieval.cross_encoder)
-    
-    logger.info(f"Создаём CrossEncoderReranker с top_n={top_n}...")
-    reranker = CrossEncoderReranker(model=cross_encoder, top_n=top_n)
-    
-    logger.info("Оборачиваем базовый ретривер с помощью ContextualCompressionRetriever...")
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=reranker,
-        base_retriever=retriever
-    )
-    
-    logger.info("Ретривер с Cross-Encoder Reranking успешно создан.")
-    return compression_retriever
+    if app_settings.use_cross_reranker:
+        top_n = top_n or app_settings.retrieval.top_k
+        
+        logger.info("Инициализация модели кросс-энкодера для reranking...")
+        cross_encoder = HuggingFaceCrossEncoder(model_name=app_settings.retrieval.cross_encoder)
+        
+        logger.info(f"Создаём CrossEncoderReranker с top_n={top_n}...")
+        reranker = CrossEncoderReranker(model=cross_encoder, top_n=top_n)
+        
+        logger.info("Оборачиваем базовый ретривер с помощью ContextualCompressionRetriever...")
+        compression_retriever = ContextualCompressionRetriever(
+            base_compressor=reranker,
+            base_retriever=retriever
+        )
+        
+        logger.info("Ретривер с Cross-Encoder Reranking успешно создан.")
+        return compression_retriever
+    else:
+        logger.info("Cross-Encoder Reranking отключен, возвращаем базовый ретривер.")
+        return retriever

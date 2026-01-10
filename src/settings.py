@@ -114,7 +114,11 @@ class AppSettings(BaseSettings):
     database: CacheDatabaseSettings = Field(default_factory=CacheDatabaseSettings)
     callback: CallbackSettings = Field(default_factory=CallbackSettings)
     rag_chain: RagChainSettings = Field(default_factory=RagChainSettings)
-    filter_documents: bool = Field(default=True, description="Включить ли фильтрацию документов")
+    paraphrase_query: bool = Field(default=True, description="Включить ли переформулировку запроса")
+    use_bm25_retriever: bool = Field(default=False, description="Использовать ли BM25 ретривер")
+    use_qdrant_retriever: bool = Field(default=True, description="Использовать ли Qdrant ретривер")
+    filter_documents: bool = Field(default=True, description="Включить ли фильтрацию документов с помощью LLM")
+    use_cross_reranker: bool = Field(default=True, description="Использовать ли cross-encoder reranker")
     evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
 
     model_config = SettingsConfigDict(

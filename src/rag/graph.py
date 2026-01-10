@@ -41,6 +41,10 @@ class RAGGraph:
 
     async def _paraphrase_query(self, state: RAGState) -> RAGState:
         """Переформулировка запроса пользователя."""
+        if not app_settings.paraphrase_query:
+            logger.info("Переформулировка запроса отключена")
+            return state
+        
         logger.info(f"Запрос пользователя: {state.query}")
         
         response = await self.paraphrase_llm.ainvoke([
@@ -95,20 +99,21 @@ class RAGGraph:
 
     async def _identify_relevant_docs(self, state: RAGState) -> RAGState:
         """Идентификация релевантных ID документов и фильтрация."""
-        logger.info("Идентификация релевантных документов")
-        docs_data = self._format_docs_data(state.documents)
-        
-        # Используем структурированный вывод - получаем Pydantic объект напрямую
-        relevant_docs_response: RelevantDocumentsResponse = await self.filter_docs_llm.ainvoke([
-            SystemMessage(content=DOC_RETRIEVAL_PROMPT),
-            HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
-        ])
-        
-        # Сохраняем JSON строку для использования в промпте генерации ответа
-        state.doc_ids = relevant_docs_response.model_dump_json(indent=2)
-        
+
         # Фильтруем документы по релевантным ID только если включен флаг
         if app_settings.filter_documents:
+            logger.info("Идентификация релевантных документов")
+            docs_data = self._format_docs_data(state.documents)
+            
+            # Используем структурированный вывод - получаем Pydantic объект напрямую
+            relevant_docs_response: RelevantDocumentsResponse = await self.filter_docs_llm.ainvoke([
+                SystemMessage(content=DOC_RETRIEVAL_PROMPT),
+                HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
+            ])
+            
+            # Сохраняем JSON строку для использования в промпте генерации ответа
+            state.doc_ids = relevant_docs_response.model_dump_json(indent=2)
+        
             state.documents = self._filter_documents_by_ids(state.documents, relevant_docs_response)
             logger.info(f"Идентификация завершена, осталось {len(state.documents)} релевантных документов")
         else:
@@ -119,8 +124,16 @@ class RAGGraph:
         """Генерация ответа."""
         logger.info("Генерация ответа")
         docs_data = self._format_docs_data(state.documents)
+        
+        retrieved_data_block = (
+            f"**Релевантные данные:**\n```json\n{state.doc_ids}\n```\n\n"
+            if state.doc_ids else ""
+        )
+        
+        prompt = ANSWER_GENERATION_PROMPT.format(retrieved_data_block=retrieved_data_block)
+        
         response = await self.generate_answer_llm.ainvoke([
-            SystemMessage(content=ANSWER_GENERATION_PROMPT.format(retrieved_data=state.doc_ids)),
+            SystemMessage(content=prompt),
             HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
         state.answer = response.content
