@@ -108,7 +108,7 @@ class RAGGraph:
         state.doc_ids = relevant_docs_response.model_dump_json(indent=2)
         
         # Фильтруем документы по релевантным ID только если включен флаг
-        if app_settings.rag.filter_documents:
+        if app_settings.filter_documents:
             state.documents = self._filter_documents_by_ids(state.documents, relevant_docs_response)
             logger.info(f"Идентификация завершена, осталось {len(state.documents)} релевантных документов")
         else:
