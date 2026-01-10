@@ -6,13 +6,15 @@ from langgraph.graph import END, START, StateGraph
 from src.settings import app_settings
 from src.logger import logger
 from src.rag.prompts import ANSWER_GENERATION_PROMPT, DOC_RETRIEVAL_PROMPT, PARAPHRASE_PROMPT
-from src.rag.schemas import Document
+from src.rag.schemas import Document, RelevantDocumentsResponse
 from src.rag.state import RAGState
 
 class RAGGraph:
     def __init__(self, retriever: ContextualCompressionRetriever, callback_config: dict = None):
         self.retriever = retriever
-        self.filter_docs_llm = create_llm(app_settings.llm)
+        # Используем with_structured_output для гарантии правильного формата ответа
+        base_filter_llm = create_llm(app_settings.llm)
+        self.filter_docs_llm = base_filter_llm.with_structured_output(RelevantDocumentsResponse)
         self.paraphrase_llm = create_llm(app_settings.llm)
         self.generate_answer_llm = create_llm(app_settings.llm)
         self.graph = self._build_graph()
@@ -74,16 +76,40 @@ class RAGGraph:
         """Форматирует документы для передачи в LLM."""
         return "\n\n".join(str(doc) for doc in documents)
 
+    def _filter_documents_by_ids(self, documents: list[Document], relevant_docs_response: RelevantDocumentsResponse) -> list[Document]:
+        """Фильтрует документы по релевантным ID из структурированного ответа."""
+        # Создаем множество пар (document_id, chunk_id) для быстрого поиска
+        relevant_pairs = {
+            (item.document_id, item.chunk_id)
+            for item in relevant_docs_response.relevant_documents
+        }
+        
+        # Фильтруем документы
+        filtered_docs = [
+            doc for doc in documents
+            if (doc.document_id, doc.chunk_id) in relevant_pairs
+        ]
+        
+        logger.info(f"Отфильтровано документов: {len(filtered_docs)} из {len(documents)}")
+        return filtered_docs
+
     async def _identify_relevant_docs(self, state: RAGState) -> RAGState:
-        """Идентификация релевантных ID документов."""
+        """Идентификация релевантных ID документов и фильтрация."""
         logger.info("Идентификация релевантных документов")
         docs_data = self._format_docs_data(state.documents)
-        response = await self.filter_docs_llm.ainvoke([
+        
+        # Используем структурированный вывод - получаем Pydantic объект напрямую
+        relevant_docs_response: RelevantDocumentsResponse = await self.filter_docs_llm.ainvoke([
             SystemMessage(content=DOC_RETRIEVAL_PROMPT),
             HumanMessage(content=f"Документы:\n\n{docs_data}\n\nВопрос: {state.query}")
         ])
-        state.doc_ids = response.content
-        logger.info("Идентификация завершена")
+        
+        # Сохраняем JSON строку для использования в промпте генерации ответа
+        state.doc_ids = relevant_docs_response.model_dump_json(indent=2)
+        
+        # Фильтруем документы по релевантным ID
+        state.documents = self._filter_documents_by_ids(state.documents, relevant_docs_response)
+        logger.info(f"Идентификация завершена, осталось {len(state.documents)} релевантных документов")
         return state
 
     async def _generate_answer(self, state: RAGState) -> RAGState:
