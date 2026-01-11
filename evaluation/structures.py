@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -13,6 +13,7 @@ class EvaluatedItem:
     correct_chunk_ids: List[str]
     retrieved_chunk_ids: List[str]
     retrieved_contexts: List[Dict[str, Any]]
+    duration: Optional[float] = None
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -24,5 +25,6 @@ class EvaluatedItem:
             "answer": self.answer,
             "correct_chunk_ids": self.correct_chunk_ids,
             "retrieved_chunk_ids": self.retrieved_chunk_ids,
-            "retrieved_contexts": self.retrieved_contexts
+            "retrieved_contexts": self.retrieved_contexts,
+            "duration": self.duration
         }

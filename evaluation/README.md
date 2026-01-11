@@ -85,7 +85,8 @@ python evaluation/evaluate_dataset_run.py \
 --dataset-name <имя_датасета> \
 --run-name <имя_запуска> \
 [--hf-model <модель>] \
-[--output <путь_к_выходному_файлу>]
+[--output <путь_к_выходному_файлу>] \
+[--limit <число>]
 ```
 
 #### Пример запуска
@@ -95,5 +96,6 @@ python evaluation/evaluate_dataset_run.py \
 --dataset-name habr-rag-dataset \
 --run-name dataset-run-01 \
 --hf-model intfloat/multilingual-e5-small \
---output evaluation/logs/my_evaluation.json
+--output evaluation/logs/my_evaluation.json \
+--limit 2
 ```
